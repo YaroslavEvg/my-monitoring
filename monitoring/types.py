@@ -41,6 +41,7 @@ class HttpRouteConfig:
     json_body: Optional[Any] = None
     allow_redirects: bool = True
     verify_ssl: bool = True
+    ca_bundle: Optional[str] = None
     description: Optional[str] = None
     enabled: bool = True
     body_max_chars: int = 2048
@@ -71,6 +72,7 @@ class HttpRouteConfig:
             json_body=raw.get("json"),
             allow_redirects=raw.get("allow_redirects", True),
             verify_ssl=raw.get("verify_ssl", True),
+            ca_bundle=raw.get("ca_bundle") or raw.get("ca_cert") or raw.get("verify_path"),
             description=raw.get("description"),
             enabled=raw.get("enabled", True),
             body_max_chars=body_limit,

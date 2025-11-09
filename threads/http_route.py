@@ -4,6 +4,7 @@ from __future__ import annotations
 from contextlib import ExitStack
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from threading import Event
 from typing import Any, Dict, Optional
 
@@ -56,7 +57,7 @@ class HttpRouteMonitor(BaseMonitorThread):
                     auth=self._basic_auth(),
                     timeout=self.config.timeout,
                     allow_redirects=self.config.allow_redirects,
-                    verify=self.config.verify_ssl,
+                    verify=self._verify_option(),
                 )
         except (requests.RequestException, OSError) as exc:
             error_payload = str(exc)
@@ -137,3 +138,17 @@ class HttpRouteMonitor(BaseMonitorThread):
             return None
         creds = self.config.basic_auth
         return HTTPBasicAuth(creds.username, creds.password)
+
+    def _verify_option(self) -> Any:
+        if not self.config.ca_bundle:
+            return self.config.verify_ssl
+
+        ca_path = Path(self.config.ca_bundle).expanduser()
+        if not ca_path.exists():
+            self.logger.warning(
+                "Файл пользовательского сертификата %s не найден, fallback к verify=%s",
+                ca_path,
+                self.config.verify_ssl,
+            )
+            return self.config.verify_ssl
+        return str(ca_path)

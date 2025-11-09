@@ -150,3 +150,16 @@ routes:
       - basic-auth
       - protected
     description: "GET с базовой авторизацией (логин test-user / пароль test-pass)."
+
+  - name: httpbin-custom-ca
+    type: http
+    url: https://httpbin.org/status/418
+    method: GET
+    interval: 600
+    timeout: 10
+    ca_bundle: certs/internal-root.pem
+    enabled: false
+    tags:
+      - custom-ca
+      - disabled-example
+    description: "Пример маршрута с кастомным CA (по умолчанию отключён, так как файл отсутствует)."

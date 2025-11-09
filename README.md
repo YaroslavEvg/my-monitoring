@@ -39,6 +39,7 @@ Python-конструктор для описания HTTP-маршрутов м
 | `file.path`, `file.field_name`, `file.content_type` | ✖ | Настройки отправки локального файла в multipart/form-data. |
 | `max_response_chars` | ✖ | Сколько символов ответа сохранять для анализа. |
 | `basic_auth.username`, `basic_auth.password` | ✖ | Пара логин/пароль для HTTP Basic Auth (заголовок `Authorization`). |
+| `ca_bundle` | ✖ | Путь к кастомному PEM-файлу цепочки сертификатов для проверки TLS. |
 | `enabled` | ✖ | Быстрое отключение маршрута без удаления. |
 | `tags` | ✖ | Любые теги (строки) для последующей обработки в Zabbix. |
 
@@ -60,6 +61,14 @@ basic_auth:
   username: test-user
   password: test-pass
 ```
+
+Для сервисов с самоподписанными сертификатами можно указать свой PEM-файл:
+
+```yaml
+ca_bundle: certs/internal-root.pem
+```
+
+Файл должен существовать на узле, где запускается мониторинг; Requests передаст его в параметр `verify`.
 
 ### Структура файла результатов
 
