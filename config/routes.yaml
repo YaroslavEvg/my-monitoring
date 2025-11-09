@@ -1,0 +1,138 @@
+routes:
+  - name: httpbin-status
+    type: http
+    url: https://httpbin.org/status/200
+    method: GET
+    interval: 60
+    timeout: 5
+    tags:
+      - demo
+      - status
+    description: "Simple health endpoint returning HTTP 200 for demo purposes."
+
+  - name: httpbin-upload
+    type: http
+    url: https://httpbin.org/post
+    method: POST
+    interval: 120
+    timeout: 15
+    headers:
+      X-Monitor-Origin: sber-monitoring
+    data:
+      sample: "true"
+    file:
+      path: files/sample_payload.txt
+      field_name: attachment
+      content_type: text/plain
+    max_response_chars: 1024
+    description: "Uploads a small text file to prove that file uploads work."
+
+  - name: httpbin-json
+    type: http
+    url: https://httpbin.org/anything/json
+    method: POST
+    interval: 90
+    timeout: 10
+    headers:
+      Content-Language: ru
+    json:
+      service: sber-monitoring
+      action: health-check
+      payload:
+        key: value
+        nested:
+          list:
+            - one
+            - two
+    tags:
+      - json
+      - post
+    description: "POST с JSON-телом."
+
+  - name: httpbin-put-form
+    type: http
+    url: https://httpbin.org/anything/form
+    method: PUT
+    interval: 75
+    timeout: 12
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      X-Requested-With: monitoring-agent
+    data:
+      role: observer
+      env: staging
+    tags:
+      - put
+      - form
+    description: "PUT с form-urlencoded телом."
+
+  - name: httpbin-delete
+    type: http
+    url: https://httpbin.org/delete
+    method: DELETE
+    interval: 120
+    timeout: 8
+    params:
+      soft: "true"
+      source: agent
+    allow_redirects: false
+    tags:
+      - delete
+      - params
+    description: "DELETE с query-параметрами и отключёнными редиректами."
+
+  - name: example-head
+    type: http
+    url: https://example.org/
+    method: HEAD
+    interval: 300
+    timeout: 5
+    body_max_chars: 256
+    tags:
+      - head
+      - example
+    description: "HEAD-запрос к другому домену."
+
+  - name: postman-echo-query
+    type: http
+    url: https://postman-echo.com/get
+    method: GET
+    interval: 65
+    timeout: 7
+    params:
+      id: "42"
+      source: sber-monitoring
+    tags:
+      - get
+      - other-domain
+    description: "GET-запрос с query-параметрами на другом домене."
+
+  - name: httpbin-options
+    type: http
+    url: https://httpbin.org/anything/options
+    method: OPTIONS
+    interval: 180
+    timeout: 6
+    headers:
+      Access-Control-Request-Method: POST
+      Access-Control-Request-Headers: X-Custom-Header
+    tags:
+      - options
+      - cors
+    description: "OPTIONS-запрос с CORS-заголовками."
+
+  - name: httpbin-patch
+    type: http
+    url: https://httpbin.org/anything/patch
+    method: PATCH
+    interval: 150
+    timeout: 9
+    json:
+      operation: partial-update
+      fields:
+        status: active
+        region: ru-central
+    tags:
+      - patch
+      - partial-update
+    description: "PATCH с JSON-телом."

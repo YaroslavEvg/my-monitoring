@@ -1,167 +1,102 @@
-import threading
+"""Точка входа сервиса мониторинга HTTP-маршрутов."""
+from __future__ import annotations
+
+import argparse
 import logging
-from waitress import serve
-from flask import Flask
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.executors.pool import ThreadPoolExecutor
+import time
+from threading import Event
+
 import init
-from threads.campuses.campuses import get_campus
-from threads.campuses.participants import get_participants
-from threads.campuses.coalitions import get_coalitions
-from threads.campuses.clusters import get_clusters
-from threads.clusters.maps import get_maps
-from threads.clusters.mapsOnline import get_mapsOnline
-from threads.sales import get_sales
-from threads.events import get_events
-from threads.coalitions_participants import get_coalitions_participants
-from threads.participants.info import get_participants_info
-from threads.participants.skills import get_participants_skills
-from threads.participants.projects import get_participants_projects
+from monitoring import MonitoringConfig, ResultWriter, load_config
+from threads import build_monitors
 
-# Тайм-аут на выполнение задачи (24 часа)
-TASK_TIMEOUT = 86400 * 2  # 24 часа в секундах
 
-init.init_logging()
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="HTTP route monitoring for Zabbix collectors")
+    parser.add_argument(
+        "--config",
+        default="config/routes.yaml",
+        help="Path to YAML/JSON file with route definitions (default: config/routes.yaml)",
+    )
+    parser.add_argument(
+        "--results-file",
+        default="monitoring_results.json",
+        help="Where to store the latest probe results for Zabbix",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        help="Logging level (DEBUG, INFO, etc.)",
+    )
+    parser.add_argument(
+        "--log-file",
+        default=None,
+        help="Optional log file path",
+    )
+    parser.add_argument(
+        "--one-shot",
+        action="store_true",
+        help="Run every monitor once and exit (useful for ad-hoc checks)",
+    )
+    return parser.parse_args()
 
-app = Flask(__name__)
 
-# Установка параметров планировщика
-executors = {
-    'default': ThreadPoolExecutor(20)
-}
-scheduler = BackgroundScheduler(executors=executors)
+def _wait_for(monitors, stop_event: Event, one_shot: bool) -> None:
+    try:
+        while True:
+            alive = any(m.is_alive() for m in monitors)
+            if not alive:
+                break
+            time.sleep(1)
+            if one_shot and not alive:
+                break
+    except KeyboardInterrupt:
+        logging.info("Received interrupt, stopping monitors...")
+        stop_event.set()
+    finally:
+        for monitor in monitors:
+            monitor.join(timeout=5)
 
-# def schedule_jobs():
-#     global scheduler
 
-#     jobs = {
-#         'get_campus': get_campus,
-#         'get_participants': get_participants,
-#         'get_coalitions': get_coalitions,
-#         'get_clusters': get_clusters,
-#         'get_maps': get_maps,
-#         'get_sales': get_sales,
-#         'get_events': get_events,
-#         'get_coalitions_participants': get_coalitions_participants,
-#         'get_participants_info': get_participants_info,
-#         'get_participants_skills': get_participants_skills,
-#         'get_participants_projects': get_participants_projects
-#     }
+def main() -> int:
+    args = parse_args()
+    log_files = [args.log_file] if args.log_file else None
+    init.init_logging(args.log_level, log_files=log_files)
 
-#     interval_jobs = {
-#         'get_sales': {'hours': 1},
-#         'get_events': {'minutes': 2}
-#     }
+    try:
+        config = load_config(args.config)
+    except Exception as exc:  # noqa: BLE001
+        logging.error("Failed to load config %s: %s", args.config, exc)
+        return 1
 
-#     cron_jobs = {
-#         'get_campus': {'day_of_week': '0-6', 'hour': '1', 'minute': '0'}, # Каждую субботу в 8:00
-#         'get_participants': {'day_of_week': '0-6', 'hour': '1', 'minute': '10'}, # Каждый день в 1:00
-#         'get_participants_info': {'day_of_week': '0-6', 'hour': '3', 'minute': '0'}, # Каждый день в 3:00
-#         'get_participants_skills': {'day_of_week': '0-6', 'hour': '6', 'minute': '0'}, # Каждый день в 6:00
-#         # 'get_clusters': {'day_of_week': 'wed', 'hour': '5', 'minute': '0'}, # Каждую среду в 5:00
-#         # 'get_maps': {'day_of_week': 'wed', 'hour': '6', 'minute': '0'}, # Каждую среду в 6:00
-#         'get_coalitions_participants': {'day_of_week': 'fri', 'hour': '2', 'minute': '0'}, # Каждую пятницу в 2:00
-#         'get_coalitions': {'day_of_week': 'tue', 'hour': '3', 'minute': '0'}, # Каждый вторник в 3:00
-#         'get_participants_projects': {'day_of_week': '0-6', 'hour': '9', 'minute': '0'} # Каждый день в 9:00
-#     }
+    enabled_routes = config.enabled_routes
+    if not enabled_routes:
+        logging.warning("No enabled routes configured. Nothing to monitor.")
+        return 0
 
-#     for job_id, interval in interval_jobs.items():
-#         func = jobs[job_id]
-#         if scheduler.get_job(job_id):
-#             scheduler.remove_job(job_id)
-#         scheduler.add_job(func=func, trigger="interval", id=job_id, **interval, max_instances=3, misfire_grace_time=3600)
+    writer = ResultWriter(args.results_file)
+    stop_event = Event()
 
-#     for job_id, cron_time in cron_jobs.items():
-#         func = jobs[job_id]
-#         if scheduler.get_job(job_id):
-#             scheduler.remove_job(job_id)
-#         scheduler.add_job(func=func, trigger='cron', id=job_id, **cron_time, max_instances=3, misfire_grace_time=3600)
+    try:
+        monitors = build_monitors(enabled_routes, writer, stop_event, one_shot=args.one_shot)
+    except Exception as exc:  # noqa: BLE001
+        logging.error("Failed to initialize monitors: %s", exc)
+        return 1
 
-#     scheduler.start()
+    for monitor in monitors:
+        monitor.start()
+        logging.info(
+            "Started monitor %s %s %s interval=%ss",
+            monitor.config.name,
+            monitor.config.method,
+            monitor.config.url,
+            monitor.config.interval,
+        )
 
-def timeout_handler(func, timeout):
-    """Запускает функцию с тайм-аутом. Возвращает True, если выполнена, иначе False."""
-    thread = threading.Thread(target=func)
-    thread.start()
-    thread.join(timeout)  # Ждем завершения задачи до тайм-аута
-    if thread.is_alive():
-        logging.error(f"Задача {func.__name__} не завершилась за {timeout} секунд и будет принудительно завершена.")
-        return False  # Задача не завершилась
-    return True  # Задача успешно завершена
+    _wait_for(monitors, stop_event, args.one_shot)
+    logging.info("Monitoring stopped")
+    return 0
 
-def wrap_with_timeout(func):
-    """Обертка для задач с тайм-аутом."""
-    def wrapper():
-        if not timeout_handler(func, TASK_TIMEOUT):
-            logging.error(f"Перезапуск задачи {func.__name__} после тайм-аута.")
-            timeout_handler(func, TASK_TIMEOUT)  # Перезапускаем задачу, если она не завершилась
-    return wrapper
 
-def schedule_jobs():
-    global scheduler
-
-    jobs = {
-        'get_campus': get_campus,
-        'get_participants': get_participants,
-        'get_coalitions': get_coalitions,
-        'get_clusters': get_clusters,
-        'get_maps': get_maps,
-        'get_sales': get_sales,
-        'get_events': get_events,
-        'get_coalitions_participants': get_coalitions_participants,
-        'get_participants_info': get_participants_info,
-        'get_participants_skills': get_participants_skills,
-        'get_participants_projects': get_participants_projects
-    }
-
-    interval_jobs = {
-        'get_sales': {'hours': 1},
-        'get_events': {'minutes': 2}
-    }
-
-    cron_jobs = {
-        'get_campus': {'day_of_week': '0-6', 'hour': '1', 'minute': '0'}, # Каждый день в 1:00
-        'get_participants': {'day_of_week': '0-6', 'hour': '1', 'minute': '10'}, # Каждый день в 1:10
-        'get_participants_info': {'day_of_week': '0-6', 'hour': '3', 'minute': '0'}, # Каждый день в 3:00
-        'get_participants_skills': {'day_of_week': '0-6', 'hour': '6', 'minute': '0'}, # Каждый день в 6:00
-        'get_coalitions_participants': {'day_of_week': 'fri', 'hour': '2', 'minute': '0'}, # Пятница в 2:00
-        'get_coalitions': {'day_of_week': 'tue', 'hour': '3', 'minute': '0'} #, # Вторник в 3:00
-        # 'get_participants_projects': {'day_of_week': '0-6', 'hour': '9', 'minute': '0'} # Каждый день в 9:00
-    }
-
-    for job_id, interval in interval_jobs.items():
-        func = wrap_with_timeout(jobs[job_id])  # Оборачиваем задачу в тайм-аут
-        if scheduler.get_job(job_id):
-            scheduler.remove_job(job_id)
-        scheduler.add_job(func=func, trigger="interval", id=job_id, **interval, max_instances=1, misfire_grace_time=3600)
-
-    for job_id, cron_time in cron_jobs.items():
-        func = wrap_with_timeout(jobs[job_id])  # Оборачиваем задачу в тайм-аут
-        if scheduler.get_job(job_id):
-            scheduler.remove_job(job_id)
-        scheduler.add_job(func=func, trigger='cron', id=job_id, **cron_time, max_instances=1, misfire_grace_time=3600)
-
-    scheduler.start()
-
-def run_initial_tasks():
-    get_campus()
-    get_coalitions()
-    # get_clusters()
-    # get_maps()
-    # get_mapsOnline()
-    get_sales()
-    get_events()
-    get_participants()
-    get_participants_info()
-    get_coalitions_participants()
-    get_participants_skills()
-
-if __name__ == '__main__':
-    scheduler_thread = threading.Thread(target=schedule_jobs)
-    scheduler_thread.daemon = True
-    scheduler_thread.start()
-    get_events()
-    # get_participants_info()
-    # get_participants_skills()
-    # run_initial_tasks()
-    serve(app, host='0.0.0.0', port=8000)
+if __name__ == "__main__":
+    raise SystemExit(main())

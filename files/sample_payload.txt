@@ -1,0 +1,1 @@
+Demo payload used for monitoring file uploads.
