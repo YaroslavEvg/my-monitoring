@@ -13,8 +13,9 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import init
-from monitoring import MonitoringConfig, ResultWriter, load_config
-from threads import build_monitors
+from monitoring.config import MonitoringConfig, load_config
+from monitoring.persistence import ResultWriter
+from threads.__init__ import build_monitors
 
 
 def parse_args() -> argparse.Namespace:
