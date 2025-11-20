@@ -1,0 +1,16 @@
+                                def jsonBody = body.toString()
+                                def encodedJson = java.net.URLEncoder.encode(jsonBody, "UTF-8")
+                                response = httpRequest(
+                                    url: "${params.URL_AGENT}/api/v3/projects/add?json=${encodedJson}",
+                                    httpMode: 'POST',
+                                    authentication: params.TUZ,
+                                    customHeaders: [
+                                        [name: 'Content-Type', value: 'multipart/form-data']
+                                    ],
+                                    uploadFile: uploadFile,
+                                    timeout: myTimeout / retryCount * 2,
+                                    multipartName: 'file',
+                                    validResponseCodes: '200:299',
+                                    consoleLogResponseBody: true,
+                                    ignoreSslErrors: true
+                                )
