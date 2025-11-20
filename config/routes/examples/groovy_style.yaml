@@ -1,0 +1,17 @@
+routes:
+  - name: groovy-project-upload
+    type: http
+    url: https://example.org/api/v3/projects/add
+    method: POST
+    headers:
+      Content-Language: ru
+    file:
+      path: files/sample_payload.txt
+      field_name: file
+      content_type: text/plain
+    json: payloads/project.json
+    json_query_param: json
+    tags:
+      - groovy
+      - query-json
+    description: "Пример запроса как в groovy: файл + JSON в query-параметре."

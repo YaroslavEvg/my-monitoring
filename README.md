@@ -55,6 +55,7 @@ Python-конструктор для описания HTTP-маршрутов м
 | `TZ` | `Europe/Moscow` | Можно переопределить переменной окружения `TZ`. |
 | `multipart_json_field` | `json` | Имя части multipart-формы для JSON при наличии файлов. |
 | `multipart_json_filename` | `<поле>.json` | Имя файла JSON-части (можно задать вручную). |
+| `json_query_param` | не задано | Если указать, JSON будет сериализован и добавлен в query-параметр. |
 
 Каждый элемент в `routes` задаёт один HTTP-монитор. Ниже перечислены основные поля:
 
@@ -70,7 +71,8 @@ Python-конструктор для описания HTTP-маршрутов м
 | `data` | ✖ | Тело запроса в обычном (form/urlencoded) виде. |
 | `json` | ✖ | JSON-тело запроса. Если поле задано, библиотека `requests` отправит payload с `Content-Type: application/json`. |
 | `file.path`, `file.field_name`, `file.content_type` | ✖ | Настройки отправки локального файла в multipart/form-data. |
-| `multipart_json_field` | ✖ | Имя поля для JSON-пейлоада, который будет добавлен в multipart вместе с файлом (по умолчанию `json`). |
+| `multipart_json_field` / `multipart_json_filename` | ✖ | Имя поля и файла для JSON-пейлоада внутри multipart (если требуется). |
+| `json_query_param` | ✖ | Имя query-параметра, в который нужно сериализовать JSON вместо тела. |
 | `max_response_chars` | ✖ | Сколько символов ответа сохранять для анализа. |
 | `basic_auth.username`, `basic_auth.password` | ✖ | Пара логин/пароль для HTTP Basic Auth (заголовок `Authorization`). |
 | `ca_bundle` | ✖ | Путь к кастомному PEM-файлу цепочки сертификатов для проверки TLS. |
@@ -109,22 +111,16 @@ multipart_json_field: meta
 multipart_json_filename: meta-request.json
 ```
 
-Если одновременно указаны `file` и `json`, монитор отправит multipart/form-data, где JSON будет помещён отдельным полем. Имя поля можно
-задать параметром `multipart_json_field` (по умолчанию используется `json`). Например:
+Чтобы повторить groovy-пример, где JSON передаётся в query-параметре, воспользуйтесь `json_query_param`. Агент сериализует JSON в строку, экранирует и добавит к URL (`?json=%7B...%7D`), а тело запроса останется multipart только с файлом:
 
 ```yaml
-method: POST
-url: https://example.org/upload
 file:
-  path: files/report.csv
-  field_name: uploadFile
-multipart_json_field: jsonBody
-json:
-  customer: TUZ
-  retryCount: 3
+  path: files/sample_payload.txt
+  field_name: file
+  content_type: text/plain
+json: payloads/project.json
+json_query_param: json
 ```
-
-В этом случае тело запроса будет содержать и файл, и поле `jsonBody` со строковым JSON-значением.
 
 Для защиты по Basic Auth добавьте:
 

@@ -50,6 +50,7 @@ class HttpRouteConfig:
     basic_auth: Optional[BasicAuthConfig] = None
     multipart_json_field: Optional[str] = None
     multipart_json_filename: Optional[str] = None
+    json_query_param: Optional[str] = None
     tags: List[str] = field(default_factory=list)
     monitor_type: str = "http"
     source_path: Optional[str] = None
@@ -87,6 +88,7 @@ class HttpRouteConfig:
             basic_auth=basic_auth,
             multipart_json_field=raw.get("multipart_json_field") or raw.get("json_field"),
             multipart_json_filename=raw.get("multipart_json_filename") or raw.get("json_filename"),
+            json_query_param=raw.get("json_query_param") or raw.get("json_param"),
             tags=list(raw.get("tags", [])),
             monitor_type=raw.get("type", "http").lower(),
             source_path=source_path,

@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Event
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -49,16 +49,24 @@ class HttpRouteMonitor(BaseMonitorThread):
                 files = self._prepare_files(stack)
                 data = self.config.data
                 json_payload = self.config.json_body
+                params = self._copy_mapping(self.config.params)
+
+                if json_payload is not None and self.config.json_query_param:
+                    params = params or {}
+                    params[self.config.json_query_param] = self._encode_json_field(json_payload)
+                    json_payload = None
 
                 if files and json_payload is not None:
                     files = self._inject_json_part(files, json_payload)
                     json_payload = None
 
+                headers = self._prepare_headers(files is not None)
+
                 response = self.session.request(
                     method=self.config.method,
                     url=self.config.url,
-                    headers=self._empty_to_none(self.config.headers),
-                    params=self._empty_to_none(self.config.params),
+                    headers=headers,
+                    params=self._empty_to_none(params),
                     data=data,
                     json=json_payload,
                     files=files,
@@ -123,6 +131,18 @@ class HttpRouteMonitor(BaseMonitorThread):
             )
         }
 
+    def _prepare_headers(self, has_files: bool) -> Optional[Dict[str, str]]:
+        headers = self._copy_mapping(self.config.headers)
+        if not headers:
+            return None
+
+        if has_files:
+            for key in list(headers):
+                if key.lower() == "content-type":
+                    self.logger.warning("Удаляю заголовок Content-Type, так как его выставляет requests при multipart.")
+                    headers.pop(key)
+        return headers or None
+
     def _inject_json_part(self, files: Dict[str, Any], payload: Any) -> Dict[str, Any]:
         files_copy = dict(files)
         field_name = self.config.multipart_json_field or "json"
@@ -163,6 +183,12 @@ class HttpRouteMonitor(BaseMonitorThread):
         if not value:
             return None
         return value
+
+    @staticmethod
+    def _copy_mapping(value: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
+        if not value:
+            return None
+        return dict(value)
 
     def _basic_auth(self) -> Optional[HTTPBasicAuth]:
         if not self.config.basic_auth:
