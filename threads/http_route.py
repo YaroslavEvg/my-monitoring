@@ -47,7 +47,13 @@ class HttpRouteMonitor(BaseMonitorThread):
         try:
             with ExitStack() as stack:
                 files = self._prepare_files(stack)
-                data, json_payload = self._prepare_bodies(files)
+                data = self.config.data
+                json_payload = self.config.json_body
+
+                if files and json_payload is not None:
+                    files = self._inject_json_part(files, json_payload)
+                    json_payload = None
+
                 response = self.session.request(
                     method=self.config.method,
                     url=self.config.url,
@@ -117,34 +123,21 @@ class HttpRouteMonitor(BaseMonitorThread):
             )
         }
 
-    def _prepare_bodies(self, files: Optional[Dict[str, Any]]) -> tuple[Optional[Any], Optional[Any]]:
-        data = self.config.data
-        json_payload = self.config.json_body
-
-        if not files or json_payload is None:
-            return data, json_payload
-
+    def _inject_json_part(self, files: Dict[str, Any], payload: Any) -> Dict[str, Any]:
+        files_copy = dict(files)
         field_name = self.config.multipart_json_field or "json"
-        encoded_json = self._encode_json_field(json_payload)
+        filename = self.config.multipart_json_filename or f"{field_name}.json"
 
-        if data is None:
-            data = {field_name: encoded_json}
-            return data, None
+        if field_name in files_copy:
+            self.logger.debug("Поле %s уже существует среди files и будет перезаписано JSON-частью.", field_name)
 
-        if isinstance(data, dict):
-            data = dict(data)
-            if field_name in data:
-                self.logger.debug(
-                    "Поле %s уже присутствует в data, перезаписываем JSON-значением для multipart.",
-                    field_name,
-                )
-            data[field_name] = encoded_json
-            return data, None
-
-        self.logger.warning(
-            "Не удалось объединить JSON-тело с multipart-формой: data имеет тип %s", type(data).__name__
+        encoded_json = self._encode_json_field(payload)
+        files_copy[field_name] = (
+            filename,
+            encoded_json,
+            "application/json",
         )
-        return data, json_payload
+        return files_copy
 
     @staticmethod
     def _encode_json_field(payload: Any) -> str:

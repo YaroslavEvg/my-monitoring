@@ -4,8 +4,8 @@
       "name": "postman-echo-query",
       "url": "https://postman-echo.com/get",
       "method": "GET",
-      "timestamp": "2025-11-20T09:52:37.232653+00:00",
-      "response_time_ms": 519.49,
+      "timestamp": "2025-11-20T11:33:51.830213+00:00",
+      "response_time_ms": 508.82,
       "tags": [
         "get",
         "other-domain"
@@ -21,8 +21,8 @@
       "name": "example-head",
       "url": "https://example.org/",
       "method": "HEAD",
-      "timestamp": "2025-11-20T09:52:37.231596+00:00",
-      "response_time_ms": 935.93,
+      "timestamp": "2025-11-20T11:33:51.828300+00:00",
+      "response_time_ms": 1072.38,
       "tags": [
         "head",
         "example"
@@ -38,8 +38,8 @@
       "name": "httpbin-patch",
       "url": "https://httpbin.org/anything/patch",
       "method": "PATCH",
-      "timestamp": "2025-11-20T09:52:37.234026+00:00",
-      "response_time_ms": 3583.7,
+      "timestamp": "2025-11-20T11:33:51.832476+00:00",
+      "response_time_ms": 2339.39,
       "tags": [
         "patch",
         "partial-update"
@@ -47,7 +47,7 @@
       "status_code": 200,
       "reason": "OK",
       "ok": true,
-      "body_excerpt": "{\n  \"args\": {}, \n  \"data\": \"{\\\"operation\\\": \\\"partial-update\\\", \\\"fields\\\": {\\\"status\\\": \\\"active\\\", \\\"region\\\": \\\"ru-central\\\"}}\", \n  \"files\": {}, \n  \"form\": {}, \n  \"headers\": {\n    \"Accept\": \"*/*\", \n    \"Accept-Encoding\": \"gzip, deflate, br, zstd\", \n    \"Content-Length\": \"87\", \n    \"Content-Type\": \"application/json\", \n    \"Host\": \"httpbin.org\", \n    \"User-Agent\": \"python-requests/2.31.0\", \n    \"X-Amzn-Trace-Id\": \"Root=1-691ee4e6-5fecfba80534006a09b735e6\"\n  }, \n  \"json\": {\n    \"fields\": {\n      \"region\": \"ru-central\", \n      \"status\": \"active\"\n    }, \n    \"operation\": \"partial-update\"\n  }, \n  \"method\": \"PATCH\", \n  \"origin\": \"77.81.138.92\", \n  \"url\": \"https://httpbin.org/anything/patch\"\n}\n",
+      "body_excerpt": "{\n  \"args\": {}, \n  \"data\": \"{\\\"operation\\\": \\\"partial-update\\\", \\\"fields\\\": {\\\"status\\\": \\\"active\\\", \\\"region\\\": \\\"ru-central\\\"}}\", \n  \"files\": {}, \n  \"form\": {}, \n  \"headers\": {\n    \"Accept\": \"*/*\", \n    \"Accept-Encoding\": \"gzip, deflate, br, zstd\", \n    \"Content-Length\": \"87\", \n    \"Content-Type\": \"application/json\", \n    \"Host\": \"httpbin.org\", \n    \"User-Agent\": \"python-requests/2.31.0\", \n    \"X-Amzn-Trace-Id\": \"Root=1-691efca0-0388c91075f854d364519497\"\n  }, \n  \"json\": {\n    \"fields\": {\n      \"region\": \"ru-central\", \n      \"status\": \"active\"\n    }, \n    \"operation\": \"partial-update\"\n  }, \n  \"method\": \"PATCH\", \n  \"origin\": \"77.81.138.92\", \n  \"url\": \"https://httpbin.org/anything/patch\"\n}\n",
       "body_truncated": false,
       "error": null
     },
@@ -55,8 +55,8 @@
       "name": "httpbin-delete",
       "url": "https://httpbin.org/delete",
       "method": "DELETE",
-      "timestamp": "2025-11-20T09:52:37.233864+00:00",
-      "response_time_ms": 1331.69,
+      "timestamp": "2025-11-20T11:33:51.832242+00:00",
+      "response_time_ms": 2067.77,
       "tags": [
         "delete",
         "params"
@@ -64,7 +64,7 @@
       "status_code": 200,
       "reason": "OK",
       "ok": true,
-      "body_excerpt": "{\n  \"args\": {\n    \"soft\": \"true\", \n    \"source\": \"agent\"\n  }, \n  \"data\": \"\", \n  \"files\": {}, \n  \"form\": {}, \n  \"headers\": {\n    \"Accept\": \"*/*\", \n    \"Accept-Encoding\": \"gzip, deflate, br, zstd\", \n    \"Content-Length\": \"0\", \n    \"Host\": \"httpbin.org\", \n    \"User-Agent\": \"python-requests/2.31.0\", \n    \"X-Amzn-Trace-Id\": \"Root=1-691ee4e6-40b84c545896649373d3805b\"\n  }, \n  \"json\": null, \n  \"origin\": \"77.81.138.92\", \n  \"url\": \"https://httpbin.org/delete?soft=true&source=agent\"\n}\n",
+      "body_excerpt": "{\n  \"args\": {\n    \"soft\": \"true\", \n    \"source\": \"agent\"\n  }, \n  \"data\": \"\", \n  \"files\": {}, \n  \"form\": {}, \n  \"headers\": {\n    \"Accept\": \"*/*\", \n    \"Accept-Encoding\": \"gzip, deflate, br, zstd\", \n    \"Content-Length\": \"0\", \n    \"Host\": \"httpbin.org\", \n    \"User-Agent\": \"python-requests/2.31.0\", \n    \"X-Amzn-Trace-Id\": \"Root=1-691efca1-77bc02fe08b3acac1cd1626b\"\n  }, \n  \"json\": null, \n  \"origin\": \"77.81.138.92\", \n  \"url\": \"https://httpbin.org/delete?soft=true&source=agent\"\n}\n",
       "body_truncated": false,
       "error": null
     },
@@ -72,8 +72,8 @@
       "name": "httpbin-put-form",
       "url": "https://httpbin.org/anything/form",
       "method": "PUT",
-      "timestamp": "2025-11-20T09:52:37.233676+00:00",
-      "response_time_ms": 2250.69,
+      "timestamp": "2025-11-20T11:33:51.831552+00:00",
+      "response_time_ms": 1188.29,
       "tags": [
         "put",
         "form"
@@ -81,7 +81,7 @@
       "status_code": 200,
       "reason": "OK",
       "ok": true,
-      "body_excerpt": "{\n  \"args\": {}, \n  \"data\": \"\", \n  \"files\": {}, \n  \"form\": {\n    \"env\": \"staging\", \n    \"role\": \"observer\"\n  }, \n  \"headers\": {\n    \"Accept\": \"*/*\", \n    \"Accept-Encoding\": \"gzip, deflate, br, zstd\", \n    \"Content-Length\": \"25\", \n    \"Content-Type\": \"application/x-www-form-urlencoded\", \n    \"Host\": \"httpbin.org\", \n    \"User-Agent\": \"python-requests/2.31.0\", \n    \"X-Amzn-Trace-Id\": \"Root=1-691ee4e6-538553947e16954b1b6ee8d5\", \n    \"X-Requested-With\": \"monitoring-agent\"\n  }, \n  \"json\": null, \n  \"method\": \"PUT\", \n  \"origin\": \"77.81.138.92\", \n  \"url\": \"https://httpbin.org/anything/form\"\n}\n",
+      "body_excerpt": "{\n  \"args\": {}, \n  \"data\": \"\", \n  \"files\": {}, \n  \"form\": {\n    \"env\": \"staging\", \n    \"role\": \"observer\"\n  }, \n  \"headers\": {\n    \"Accept\": \"*/*\", \n    \"Accept-Encoding\": \"gzip, deflate, br, zstd\", \n    \"Content-Length\": \"25\", \n    \"Content-Type\": \"application/x-www-form-urlencoded\", \n    \"Host\": \"httpbin.org\", \n    \"User-Agent\": \"python-requests/2.31.0\", \n    \"X-Amzn-Trace-Id\": \"Root=1-691efca1-4eb8792d6df5bc435ce8bfcd\", \n    \"X-Requested-With\": \"monitoring-agent\"\n  }, \n  \"json\": null, \n  \"method\": \"PUT\", \n  \"origin\": \"77.81.138.92\", \n  \"url\": \"https://httpbin.org/anything/form\"\n}\n",
       "body_truncated": false,
       "error": null
     },
@@ -89,8 +89,8 @@
       "name": "httpbin-status",
       "url": "https://httpbin.org/status/200",
       "method": "GET",
-      "timestamp": "2025-11-20T09:52:37.233192+00:00",
-      "response_time_ms": 1896.31,
+      "timestamp": "2025-11-20T11:33:51.830767+00:00",
+      "response_time_ms": 1908.33,
       "tags": [
         "demo",
         "status"
@@ -106,8 +106,8 @@
       "name": "httpbin-json",
       "url": "https://httpbin.org/anything/json",
       "method": "POST",
-      "timestamp": "2025-11-20T09:52:37.233437+00:00",
-      "response_time_ms": 3497.4,
+      "timestamp": "2025-11-20T11:33:51.831213+00:00",
+      "response_time_ms": 4309.0,
       "tags": [
         "json",
         "post"
@@ -115,7 +115,7 @@
       "status_code": 200,
       "reason": "OK",
       "ok": true,
-      "body_excerpt": "{\n  \"args\": {}, \n  \"data\": \"{\\\"service\\\": \\\"sber-monitoring\\\", \\\"action\\\": \\\"health-check\\\", \\\"payload\\\": {\\\"key\\\": \\\"value\\\", \\\"nested\\\": {\\\"list\\\": [\\\"one\\\", \\\"two\\\"]}}}\", \n  \"files\": {}, \n  \"form\": {}, \n  \"headers\": {\n    \"Accept\": \"*/*\", \n    \"Accept-Encoding\": \"gzip, deflate, br, zstd\", \n    \"Content-Language\": \"ru\", \n    \"Content-Length\": \"121\", \n    \"Content-Type\": \"application/json\", \n    \"Host\": \"httpbin.org\", \n    \"User-Agent\": \"python-requests/2.31.0\", \n    \"X-Amzn-Trace-Id\": \"Root=1-691ee4e6-0d3a922b3a6755dd28cde0dd\"\n  }, \n  \"json\": {\n    \"action\": \"health-check\", \n    \"payload\": {\n      \"key\": \"value\", \n      \"nested\": {\n        \"list\": [\n          \"one\", \n          \"two\"\n        ]\n      }\n    }, \n    \"service\": \"sber-monitoring\"\n  }, \n  \"method\": \"POST\", \n  \"origin\": \"77.81.138.92\", \n  \"url\": \"https://httpbin.org/anything/json\"\n}\n",
+      "body_excerpt": "{\n  \"args\": {}, \n  \"data\": \"{\\\"service\\\": \\\"sber-monitoring\\\", \\\"action\\\": \\\"health-check\\\", \\\"payload\\\": {\\\"key\\\": \\\"value\\\", \\\"nested\\\": {\\\"list\\\": [\\\"one\\\", \\\"two\\\"]}}}\", \n  \"files\": {}, \n  \"form\": {}, \n  \"headers\": {\n    \"Accept\": \"*/*\", \n    \"Accept-Encoding\": \"gzip, deflate, br, zstd\", \n    \"Content-Language\": \"ru\", \n    \"Content-Length\": \"121\", \n    \"Content-Type\": \"application/json\", \n    \"Host\": \"httpbin.org\", \n    \"User-Agent\": \"python-requests/2.31.0\", \n    \"X-Amzn-Trace-Id\": \"Root=1-691efca0-0a87fea903e15b041556e051\"\n  }, \n  \"json\": {\n    \"action\": \"health-check\", \n    \"payload\": {\n      \"key\": \"value\", \n      \"nested\": {\n        \"list\": [\n          \"one\", \n          \"two\"\n        ]\n      }\n    }, \n    \"service\": \"sber-monitoring\"\n  }, \n  \"method\": \"POST\", \n  \"origin\": \"77.81.138.92\", \n  \"url\": \"https://httpbin.org/anything/json\"\n}\n",
       "body_truncated": false,
       "error": null
     },
@@ -123,13 +123,13 @@
       "name": "httpbin-upload",
       "url": "https://httpbin.org/post",
       "method": "POST",
-      "timestamp": "2025-11-20T09:52:37.234218+00:00",
-      "response_time_ms": 1987.87,
+      "timestamp": "2025-11-20T11:33:51.832669+00:00",
+      "response_time_ms": 1906.48,
       "tags": [],
       "status_code": 200,
       "reason": "OK",
       "ok": true,
-      "body_excerpt": "{\n  \"args\": {}, \n  \"data\": \"\", \n  \"files\": {\n    \"attachment\": \"Demo payload used for monitoring file uploads.\"\n  }, \n  \"form\": {\n    \"sample\": \"true\"\n  }, \n  \"headers\": {\n    \"Accept\": \"*/*\", \n    \"Accept-Encoding\": \"gzip, deflate, br, zstd\", \n    \"Content-Length\": \"323\", \n    \"Content-Type\": \"multipart/form-data; boundary=9915ff285c55faa04a3159f63a7e4425\", \n    \"Host\": \"httpbin.org\", \n    \"User-Agent\": \"python-requests/2.31.0\", \n    \"X-Amzn-Trace-Id\": \"Root=1-691ee4e6-199ea97866723246240e22b9\", \n    \"X-Monitor-Origin\": \"sber-monitoring\"\n  }, \n  \"json\": null, \n  \"origin\": \"77.81.138.92\", \n  \"url\": \"https://httpbin.org/post\"\n}\n",
+      "body_excerpt": "{\n  \"args\": {}, \n  \"data\": \"\", \n  \"files\": {\n    \"attachment\": \"Demo payload used for monitoring file uploads.\"\n  }, \n  \"form\": {\n    \"sample\": \"true\"\n  }, \n  \"headers\": {\n    \"Accept\": \"*/*\", \n    \"Accept-Encoding\": \"gzip, deflate, br, zstd\", \n    \"Content-Length\": \"323\", \n    \"Content-Type\": \"multipart/form-data; boundary=f320d182c89cb18ca06e5c1ecc5b0d95\", \n    \"Host\": \"httpbin.org\", \n    \"User-Agent\": \"python-requests/2.31.0\", \n    \"X-Amzn-Trace-Id\": \"Root=1-691efca1-2667032e2775c1d40fd2665e\", \n    \"X-Monitor-Origin\": \"sber-monitoring\"\n  }, \n  \"json\": null, \n  \"origin\": \"77.81.138.92\", \n  \"url\": \"https://httpbin.org/post\"\n}\n",
       "body_truncated": false,
       "error": null
     },
@@ -137,8 +137,8 @@
       "name": "httpbin-basic-auth",
       "url": "https://httpbin.org/basic-auth/test-user/test-pass",
       "method": "GET",
-      "timestamp": "2025-11-20T09:52:37.232755+00:00",
-      "response_time_ms": 2216.52,
+      "timestamp": "2025-11-20T11:33:51.830353+00:00",
+      "response_time_ms": 2144.49,
       "tags": [
         "basic-auth",
         "protected"
@@ -154,8 +154,8 @@
       "name": "httpbin-options",
       "url": "https://httpbin.org/anything/options",
       "method": "OPTIONS",
-      "timestamp": "2025-11-20T09:52:37.233326+00:00",
-      "response_time_ms": 3125.78,
+      "timestamp": "2025-11-20T11:33:51.830944+00:00",
+      "response_time_ms": 2971.55,
       "tags": [
         "options",
         "cors"
@@ -169,5 +169,5 @@
     }
   },
   "schema_version": 1,
-  "last_updated": "2025-11-20T09:52:37.234026+00:00"
+  "last_updated": "2025-11-20T11:33:51.831213+00:00"
 }

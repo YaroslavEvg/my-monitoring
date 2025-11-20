@@ -53,6 +53,8 @@ Python-конструктор для описания HTTP-маршрутов м
 | `basic_auth` | не задано | Добавьте блок `basic_auth`, если нужно. |
 | `ca_bundle` | не задано | Используйте для кастомных корневых сертификатов. |
 | `TZ` | `Europe/Moscow` | Можно переопределить переменной окружения `TZ`. |
+| `multipart_json_field` | `json` | Имя части multipart-формы для JSON при наличии файлов. |
+| `multipart_json_filename` | `<поле>.json` | Имя файла JSON-части (можно задать вручную). |
 
 Каждый элемент в `routes` задаёт один HTTP-монитор. Ниже перечислены основные поля:
 
@@ -94,6 +96,18 @@ json: payloads/create-request.json
 ```
 
 Файл должен содержать корректный JSON.
+
+Если одновременно требуется отправить файл и JSON (multipart/form-data), укажите файл в секции `file`, а JSON — как обычно. Монитор автоматически добавит ещё одну часть `Content-Type: application/json` в multipart. Поле и имя файла можно переопределить:
+
+```yaml
+file:
+  path: files/data.csv
+  field_name: upload
+  content_type: text/csv
+json: payloads/meta.json
+multipart_json_field: meta
+multipart_json_filename: meta-request.json
+```
 
 Если одновременно указаны `file` и `json`, монитор отправит multipart/form-data, где JSON будет помещён отдельным полем. Имя поля можно
 задать параметром `multipart_json_field` (по умолчанию используется `json`). Например:
