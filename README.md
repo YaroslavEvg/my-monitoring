@@ -68,6 +68,7 @@ Python-конструктор для описания HTTP-маршрутов м
 | `data` | ✖ | Тело запроса в обычном (form/urlencoded) виде. |
 | `json` | ✖ | JSON-тело запроса. Если поле задано, библиотека `requests` отправит payload с `Content-Type: application/json`. |
 | `file.path`, `file.field_name`, `file.content_type` | ✖ | Настройки отправки локального файла в multipart/form-data. |
+| `multipart_json_field` | ✖ | Имя поля для JSON-пейлоада, который будет добавлен в multipart вместе с файлом (по умолчанию `json`). |
 | `max_response_chars` | ✖ | Сколько символов ответа сохранять для анализа. |
 | `basic_auth.username`, `basic_auth.password` | ✖ | Пара логин/пароль для HTTP Basic Auth (заголовок `Authorization`). |
 | `ca_bundle` | ✖ | Путь к кастомному PEM-файлу цепочки сертификатов для проверки TLS. |
@@ -93,6 +94,23 @@ json: payloads/create-request.json
 ```
 
 Файл должен содержать корректный JSON.
+
+Если одновременно указаны `file` и `json`, монитор отправит multipart/form-data, где JSON будет помещён отдельным полем. Имя поля можно
+задать параметром `multipart_json_field` (по умолчанию используется `json`). Например:
+
+```yaml
+method: POST
+url: https://example.org/upload
+file:
+  path: files/report.csv
+  field_name: uploadFile
+multipart_json_field: jsonBody
+json:
+  customer: TUZ
+  retryCount: 3
+```
+
+В этом случае тело запроса будет содержать и файл, и поле `jsonBody` со строковым JSON-значением.
 
 Для защиты по Basic Auth добавьте:
 

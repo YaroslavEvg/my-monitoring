@@ -48,6 +48,7 @@ class HttpRouteConfig:
     body_max_chars: int = 2048
     file_upload: Optional[FileUploadConfig] = None
     basic_auth: Optional[BasicAuthConfig] = None
+    multipart_json_field: Optional[str] = None
     tags: List[str] = field(default_factory=list)
     monitor_type: str = "http"
     source_path: Optional[str] = None
@@ -83,6 +84,7 @@ class HttpRouteConfig:
             body_max_chars=body_limit,
             file_upload=file_upload,
             basic_auth=basic_auth,
+            multipart_json_field=raw.get("multipart_json_field") or raw.get("json_field"),
             tags=list(raw.get("tags", [])),
             monitor_type=raw.get("type", "http").lower(),
             source_path=source_path,

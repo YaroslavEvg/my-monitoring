@@ -1,6 +1,7 @@
 """Поток мониторинга HTTP-маршрута."""
 from __future__ import annotations
 
+import json
 from contextlib import ExitStack
 import time
 from datetime import datetime, timezone
@@ -46,13 +47,14 @@ class HttpRouteMonitor(BaseMonitorThread):
         try:
             with ExitStack() as stack:
                 files = self._prepare_files(stack)
+                data, json_payload = self._prepare_bodies(files)
                 response = self.session.request(
                     method=self.config.method,
                     url=self.config.url,
                     headers=self._empty_to_none(self.config.headers),
                     params=self._empty_to_none(self.config.params),
-                    data=self.config.data,
-                    json=self.config.json_body,
+                    data=data,
+                    json=json_payload,
                     files=files,
                     auth=self._basic_auth(),
                     timeout=self.config.timeout,
@@ -114,6 +116,42 @@ class HttpRouteMonitor(BaseMonitorThread):
                 upload.content_type or "application/octet-stream",
             )
         }
+
+    def _prepare_bodies(self, files: Optional[Dict[str, Any]]) -> tuple[Optional[Any], Optional[Any]]:
+        data = self.config.data
+        json_payload = self.config.json_body
+
+        if not files or json_payload is None:
+            return data, json_payload
+
+        field_name = self.config.multipart_json_field or "json"
+        encoded_json = self._encode_json_field(json_payload)
+
+        if data is None:
+            data = {field_name: encoded_json}
+            return data, None
+
+        if isinstance(data, dict):
+            data = dict(data)
+            if field_name in data:
+                self.logger.debug(
+                    "Поле %s уже присутствует в data, перезаписываем JSON-значением для multipart.",
+                    field_name,
+                )
+            data[field_name] = encoded_json
+            return data, None
+
+        self.logger.warning(
+            "Не удалось объединить JSON-тело с multipart-формой: data имеет тип %s", type(data).__name__
+        )
+        return data, json_payload
+
+    @staticmethod
+    def _encode_json_field(payload: Any) -> str:
+        try:
+            return json.dumps(payload, ensure_ascii=False)
+        except TypeError:
+            return str(payload)
 
     def _safe_body(self, response: requests.Response) -> tuple[TextResponse, bool]:
         try:
