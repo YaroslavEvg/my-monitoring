@@ -60,12 +60,10 @@ class HttpRouteMonitor(BaseMonitorThread):
                     files = self._inject_json_part(files, json_payload)
                     json_payload = None
 
-                headers = self._prepare_headers(files is not None)
-
                 response = self.session.request(
                     method=self.config.method,
                     url=self.config.url,
-                    headers=headers,
+                    headers=self._empty_to_none(self.config.headers),
                     params=self._empty_to_none(params),
                     data=data,
                     json=json_payload,
@@ -131,18 +129,6 @@ class HttpRouteMonitor(BaseMonitorThread):
             )
         }
 
-    def _prepare_headers(self, has_files: bool) -> Optional[Dict[str, str]]:
-        headers = self._copy_mapping(self.config.headers)
-        if not headers:
-            return None
-
-        if has_files:
-            for key in list(headers):
-                if key.lower() == "content-type":
-                    self.logger.warning("Удаляю заголовок Content-Type, так как его выставляет requests при multipart.")
-                    headers.pop(key)
-        return headers or None
-
     def _inject_json_part(self, files: Dict[str, Any], payload: Any) -> Dict[str, Any]:
         files_copy = dict(files)
         field_name = self.config.multipart_json_field or "json"
@@ -161,6 +147,8 @@ class HttpRouteMonitor(BaseMonitorThread):
 
     @staticmethod
     def _encode_json_field(payload: Any) -> str:
+        if isinstance(payload, str):
+            return payload
         try:
             return json.dumps(payload, ensure_ascii=False)
         except TypeError:
