@@ -5,8 +5,10 @@ from contextlib import ExitStack
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+import tempfile
 from threading import Event
 from typing import Any, Dict, Mapping, Optional
+import zipfile
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -52,7 +54,9 @@ class HttpRouteMonitor(BaseMonitorThread):
 
                 if json_payload is not None and self.config.json_query_param:
                     params = params or {}
-                    params[self.config.json_query_param] = self._encode_json_field(json_payload)
+                    params[self.config.json_query_param] = self._encode_json_field(
+                        json_payload, encoding=self.config.encoding_json
+                    )
                     json_payload = None
 
                 if files and json_payload is not None:
@@ -119,12 +123,25 @@ class HttpRouteMonitor(BaseMonitorThread):
         upload = self.config.file_upload
         path = upload.resolved_path()
 
-        file_obj = stack.enter_context(open(path, "rb"))
+        file_path = path
+        filename = path.name
+        content_type = upload.content_type or "application/octet-stream"
+
+        if path.is_dir() or path.suffix.lower() != ".zip":
+            tmp_dir = stack.enter_context(tempfile.TemporaryDirectory())
+            base_name = path.name if path.is_dir() else path.stem
+            archive_path = Path(tmp_dir) / f"{base_name}.zip"
+            self._build_zip(path, archive_path, target_encoding=self.config.encoding_file)
+            file_path = archive_path
+            filename = archive_path.name
+            content_type = "application/zip"
+
+        file_obj = stack.enter_context(open(file_path, "rb"))
         return {
             upload.field_name: (
-                path.name,
+                filename,
                 file_obj,
-                upload.content_type or "application/octet-stream",
+                content_type,
             )
         }
 
@@ -135,22 +152,82 @@ class HttpRouteMonitor(BaseMonitorThread):
         if field_name in files_copy:
             self.logger.debug("Поле %s уже существует среди files и будет перезаписано JSON-частью.", field_name)
 
-        encoded_json = self._encode_json_field(payload)
+        effective_encoding = self.config.encoding_json or "utf-8"
+        encoded_json = self._encode_json_field(payload, encoding=effective_encoding, as_bytes=True)
+        content_type = f"application/json; charset={effective_encoding}"
         files_copy[field_name] = (
             None,
             encoded_json,
-            "application/json",
+            content_type,
         )
         return files_copy
 
     @staticmethod
-    def _encode_json_field(payload: Any) -> str:
-        if isinstance(payload, str):
+    def _encode_json_field(payload: Any, encoding: Optional[str] = None, as_bytes: bool = False) -> Any:
+        if isinstance(payload, bytes):
+            if not as_bytes and encoding:
+                try:
+                    return payload.decode(encoding)
+                except (LookupError, UnicodeDecodeError):
+                    return payload.decode(errors="replace")
             return payload
+        if isinstance(payload, str):
+            payload_str = payload
+        else:
+            try:
+                payload_str = json.dumps(payload, ensure_ascii=False)
+            except TypeError:
+                payload_str = str(payload)
+
+        if as_bytes:
+            target_encoding = encoding or "utf-8"
+            try:
+                return payload_str.encode(target_encoding)
+            except LookupError:
+                return payload_str.encode()
+        return payload_str
+
+    @staticmethod
+    def _write_entry_with_reencode(
+        archive: zipfile.ZipFile, path: Path, arcname: str, target_encoding: Optional[str]
+    ) -> None:
+        encoding = target_encoding or "utf-8"
         try:
-            return json.dumps(payload, ensure_ascii=False)
-        except TypeError:
-            return str(payload)
+            raw = path.read_bytes()
+        except OSError as exc:
+            raise OSError(f"Не удалось прочитать файл для архивации: {path}") from exc
+
+        data = HttpRouteMonitor._reencode_bytes(raw, encoding)
+        archive.writestr(arcname, data)
+
+    @staticmethod
+    def _reencode_bytes(raw: bytes, target_encoding: str) -> bytes:
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return raw  # не можем декодировать — добавляем как есть
+        try:
+            return text.encode(target_encoding)
+        except (LookupError, UnicodeEncodeError):
+            return raw
+
+    @staticmethod
+    def _build_zip(source: Path, target: Path, target_encoding: Optional[str]) -> None:
+        with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            if source.is_file():
+                arcname = source.name
+                HttpRouteMonitor._write_entry_with_reencode(archive, source, arcname, target_encoding)
+                return
+
+            # Добавляем саму папку и все вложения, сохраняя относительные пути.
+            root_arcname = f"{source.name}/"
+            archive.writestr(root_arcname, b"")
+            for entry in sorted(source.rglob("*")):
+                relative = entry.relative_to(source.parent).as_posix()
+                if entry.is_dir():
+                    archive.writestr(f"{relative}/", b"")
+                    continue
+                HttpRouteMonitor._write_entry_with_reencode(archive, entry, relative, target_encoding)
 
     def _safe_body(self, response: requests.Response) -> tuple[TextResponse, bool]:
         try:
