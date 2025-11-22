@@ -76,7 +76,7 @@ class HttpRouteMonitor(BaseMonitorThread):
                     allow_redirects=self.config.allow_redirects,
                     verify=self._verify_option(),
                 )
-        except (requests.RequestException, OSError) as exc:
+        except (requests.RequestException, OSError, ValueError) as exc:
             error_payload = str(exc)
         finally:
             duration_ms = round((time.perf_counter() - start) * 1000, 2)
@@ -127,7 +127,17 @@ class HttpRouteMonitor(BaseMonitorThread):
         filename = path.name
         content_type = upload.content_type or "application/octet-stream"
 
-        if path.is_dir() or path.suffix.lower() != ".zip":
+        should_zip = False
+        if path.is_dir():
+            if not upload.zip_enabled:
+                raise ValueError(
+                    f"Для отправки директории {path} нужно включить zip_enabled: true в конфиге file."
+                )
+            should_zip = True
+        elif upload.zip_enabled and path.suffix.lower() != ".zip":
+            should_zip = True
+
+        if should_zip:
             tmp_dir = stack.enter_context(tempfile.TemporaryDirectory())
             base_name = path.name if path.is_dir() else path.stem
             archive_path = Path(tmp_dir) / f"{base_name}.zip"

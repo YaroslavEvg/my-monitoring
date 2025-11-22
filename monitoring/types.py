@@ -14,6 +14,7 @@ class FileUploadConfig:
     path: str
     field_name: str = "file"
     content_type: Optional[str] = None
+    zip_enabled: bool = False
 
     def resolved_path(self) -> Path:
         return Path(self.path).expanduser().resolve()

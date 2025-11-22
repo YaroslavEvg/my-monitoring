@@ -13,5 +13,6 @@ routes:
       path: files/sample_payload.txt
       field_name: attachment
       content_type: application/zip
+      zip_enabled: true
     max_response_chars: 1024
     description: "Загрузка небольшого файла в multipart/form-data."
