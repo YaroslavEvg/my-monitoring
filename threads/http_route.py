@@ -51,6 +51,7 @@ class HttpRouteMonitor(BaseMonitorThread):
                 data = self.config.data
                 json_payload = self.config.json_body
                 params = self._copy_mapping(self.config.params)
+                headers = self._copy_mapping(self.config.headers)
 
                 if json_payload is not None and self.config.json_query_param:
                     params = params or {}
@@ -63,10 +64,14 @@ class HttpRouteMonitor(BaseMonitorThread):
                     files = self._inject_json_part(files, json_payload)
                     json_payload = None
 
+                if files and headers:
+                    # Не даём пользователю фиксировать Content-Type, чтобы requests проставил boundary для multipart
+                    headers = self._drop_content_type(headers)
+
                 response = self.session.request(
                     method=self.config.method,
                     url=self.config.url,
-                    headers=self._empty_to_none(self.config.headers),
+                    headers=self._empty_to_none(headers),
                     params=self._empty_to_none(params),
                     data=data,
                     json=json_payload,
@@ -262,6 +267,17 @@ class HttpRouteMonitor(BaseMonitorThread):
         if not value:
             return None
         return dict(value)
+
+    def _drop_content_type(self, headers: Dict[str, Any]) -> Dict[str, Any]:
+        cleaned = dict(headers)
+        removed = False
+        for key in list(cleaned.keys()):
+            if key.lower() == "content-type":
+                cleaned.pop(key, None)
+                removed = True
+        if removed:
+            self.logger.debug("Удалён заголовок Content-Type: requests сам установит boundary для multipart.")
+        return cleaned
 
     def _basic_auth(self) -> Optional[HTTPBasicAuth]:
         if not self.config.basic_auth:
