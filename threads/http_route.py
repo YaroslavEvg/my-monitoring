@@ -1,6 +1,7 @@
 """Поток мониторинга HTTP-маршрута."""
 from __future__ import annotations
 import json
+import re
 from contextlib import ExitStack
 import time
 from datetime import datetime, timezone
@@ -18,6 +19,8 @@ from monitoring.types import HttpRouteConfig
 from threads.base import BaseMonitorThread
 
 TextResponse = Optional[str]
+_MISSING = object()
+_TEMPLATE_RE = re.compile(r"\{\{\s*([^}]+?)\s*\}\}")
 
 
 class HttpRouteMonitor(BaseMonitorThread):
@@ -36,32 +39,54 @@ class HttpRouteMonitor(BaseMonitorThread):
             self.session.close()
 
     def run_once(self) -> None:
-        payload = self._execute_request()
+        payload = self._execute_request_chain(self.config, None)
         self.writer.write_result(self.config, payload)
 
-    def _execute_request(self) -> Dict[str, Any]:
+    def _execute_request_chain(self, config: HttpRouteConfig, context: Optional[Any]) -> Dict[str, Any]:
+        result, response_json, has_response = self._execute_request(config, context)
+        if config.children:
+            if not has_response:
+                self.logger.debug("Дочерние запросы для %s пропущены: отсутствует ответ.", config.name)
+            else:
+                children = [
+                    self._execute_request_chain(child, response_json)
+                    for child in config.children
+                    if child.enabled
+                ]
+                if children:
+                    result["children"] = children
+        return result
+
+    def _execute_request(
+        self, config: HttpRouteConfig, context: Optional[Any]
+    ) -> tuple[Dict[str, Any], Optional[Any], bool]:
         timestamp = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
         start = time.perf_counter()
         error_payload: Optional[str] = None
         response: Optional[requests.Response] = None
+        response_json: Optional[Any] = None
+        url: Any = config.url
 
         try:
             with ExitStack() as stack:
-                files = self._prepare_files(stack)
-                data = self.config.data
-                json_payload = self.config.json_body
-                params = self._copy_mapping(self.config.params)
-                headers = self._copy_mapping(self.config.headers)
+                files = self._prepare_files(stack, config)
+                data = self._resolve_value(config.data, context)
+                json_payload = self._resolve_value(config.json_body, context)
+                params = self._resolve_mapping(config.params, context)
+                headers = self._resolve_mapping(config.headers, context)
+                url = self._resolve_text(config.url, context)
+                if not isinstance(url, str):
+                    url = str(url)
 
-                if json_payload is not None and self.config.json_query_param:
+                if json_payload is not None and config.json_query_param:
                     params = params or {}
-                    params[self.config.json_query_param] = self._encode_json_field(
-                        json_payload, encoding=self.config.encoding_json
+                    params[config.json_query_param] = self._encode_json_field(
+                        json_payload, encoding=config.encoding_json
                     )
                     json_payload = None
 
                 if files and json_payload is not None:
-                    files = self._inject_json_part(files, json_payload)
+                    files = self._inject_json_part(files, json_payload, config)
                     json_payload = None
 
                 if files and headers:
@@ -69,17 +94,17 @@ class HttpRouteMonitor(BaseMonitorThread):
                     headers = self._drop_content_type(headers)
 
                 response = self.session.request(
-                    method=self.config.method,
-                    url=self.config.url,
+                    method=config.method,
+                    url=url,
                     headers=self._empty_to_none(headers),
                     params=self._empty_to_none(params),
                     data=data,
                     json=json_payload,
                     files=files,
-                    auth=self._basic_auth(),
-                    timeout=self.config.timeout,
-                    allow_redirects=self.config.allow_redirects,
-                    verify=self._verify_option(),
+                    auth=self._basic_auth(config),
+                    timeout=config.timeout,
+                    allow_redirects=config.allow_redirects,
+                    verify=self._verify_option(config),
                 )
         except (requests.RequestException, OSError, ValueError) as exc:
             error_payload = str(exc)
@@ -87,16 +112,17 @@ class HttpRouteMonitor(BaseMonitorThread):
             duration_ms = round((time.perf_counter() - start) * 1000, 2)
 
         result: Dict[str, Any] = {
-            "name": self.config.name,
-            "url": self.config.url,
-            "method": self.config.method,
+            "name": config.name,
+            "url": url,
+            "method": config.method,
             "timestamp": timestamp,
             "response_time_ms": duration_ms,
-            "tags": self.config.tags,
+            "tags": config.tags,
         }
 
         if response is not None:
-            body, truncated = self._safe_body(response)
+            response_json = self._safe_json(response)
+            body, truncated = self._safe_body(response, config)
             result.update(
                 {
                     "status_code": response.status_code,
@@ -119,13 +145,13 @@ class HttpRouteMonitor(BaseMonitorThread):
                 }
             )
 
-        return result
+        return result, response_json, response is not None
 
-    def _prepare_files(self, stack: ExitStack) -> Optional[Dict[str, Any]]:
-        if not self.config.file_upload:
+    def _prepare_files(self, stack: ExitStack, config: HttpRouteConfig) -> Optional[Dict[str, Any]]:
+        if not config.file_upload:
             return None
 
-        upload = self.config.file_upload
+        upload = config.file_upload
         path = upload.resolved_path()
 
         file_path = path
@@ -146,7 +172,7 @@ class HttpRouteMonitor(BaseMonitorThread):
             tmp_dir = stack.enter_context(tempfile.TemporaryDirectory())
             base_name = path.name if path.is_dir() else path.stem
             archive_path = Path(tmp_dir) / f"{base_name}.zip"
-            self._build_zip(path, archive_path, target_encoding=self.config.encoding_file)
+            self._build_zip(path, archive_path, target_encoding=config.encoding_file)
             file_path = archive_path
             filename = archive_path.name
             content_type = "application/zip"
@@ -160,14 +186,14 @@ class HttpRouteMonitor(BaseMonitorThread):
             )
         }
 
-    def _inject_json_part(self, files: Dict[str, Any], payload: Any) -> Dict[str, Any]:
+    def _inject_json_part(self, files: Dict[str, Any], payload: Any, config: HttpRouteConfig) -> Dict[str, Any]:
         files_copy = dict(files)
-        field_name = self.config.multipart_json_field or "json"
+        field_name = config.multipart_json_field or "json"
 
         if field_name in files_copy:
             self.logger.debug("Поле %s уже существует среди files и будет перезаписано JSON-частью.", field_name)
 
-        effective_encoding = self.config.encoding_json or "utf-8"
+        effective_encoding = config.encoding_json or "utf-8"
         encoded_json = self._encode_json_field(payload, encoding=effective_encoding, as_bytes=True)
         content_type = f"application/json; charset={effective_encoding}"
         files_copy[field_name] = (
@@ -244,17 +270,24 @@ class HttpRouteMonitor(BaseMonitorThread):
                     continue
                 HttpRouteMonitor._write_entry_with_reencode(archive, entry, relative, target_encoding)
 
-    def _safe_body(self, response: requests.Response) -> tuple[TextResponse, bool]:
+    def _safe_body(self, response: requests.Response, config: HttpRouteConfig) -> tuple[TextResponse, bool]:
         try:
             body = response.text
         except UnicodeDecodeError:
             body = "<binary content>"
         if body is None:
             return None, False
-        max_chars = max(self.config.body_max_chars, 1)
+        max_chars = max(config.body_max_chars, 1)
         if len(body) <= max_chars:
             return body, False
         return f"{body[:max_chars]}...", True
+
+    @staticmethod
+    def _safe_json(response: requests.Response) -> Optional[Any]:
+        try:
+            return response.json()
+        except ValueError:
+            return None
 
     @staticmethod
     def _empty_to_none(value: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -262,11 +295,85 @@ class HttpRouteMonitor(BaseMonitorThread):
             return None
         return value
 
-    @staticmethod
-    def _copy_mapping(value: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
+    def _resolve_mapping(self, value: Optional[Mapping[str, Any]], context: Optional[Any]) -> Optional[Dict[str, Any]]:
         if not value:
             return None
-        return dict(value)
+        return {key: self._resolve_value(val, context) for key, val in value.items()}
+
+    def _resolve_value(self, value: Any, context: Optional[Any]) -> Any:
+        if context is None:
+            return value
+        if isinstance(value, dict):
+            return {key: self._resolve_value(val, context) for key, val in value.items()}
+        if isinstance(value, list):
+            return [self._resolve_value(item, context) for item in value]
+        if isinstance(value, tuple):
+            return tuple(self._resolve_value(item, context) for item in value)
+        if isinstance(value, str):
+            return self._resolve_text(value, context)
+        return value
+
+    def _resolve_text(self, value: str, context: Optional[Any]) -> Any:
+        if context is None:
+            return value
+        raw = value.strip()
+        if raw == "$" or raw.startswith("$."):
+            extracted = self._extract_json_path(context, raw)
+            if extracted is not _MISSING:
+                return extracted
+        if "{{" not in value:
+            return value
+
+        def replacer(match: re.Match[str]) -> str:
+            expr = match.group(1).strip()
+            if not expr.startswith("$"):
+                return match.group(0)
+            extracted = self._extract_json_path(context, expr)
+            if extracted is _MISSING:
+                self.logger.debug("Не удалось извлечь значение по пути %s", expr)
+                return match.group(0)
+            if isinstance(extracted, (dict, list)):
+                try:
+                    return json.dumps(extracted, ensure_ascii=False)
+                except TypeError:
+                    return str(extracted)
+            return str(extracted)
+
+        return _TEMPLATE_RE.sub(replacer, value)
+
+    @staticmethod
+    def _extract_json_path(payload: Any, path: str) -> Any:
+        if payload is None:
+            return _MISSING
+        raw = path.strip()
+        if raw == "$":
+            return payload
+        if not raw.startswith("$."):
+            return _MISSING
+
+        tokens: list[Any] = []
+        for segment in raw[2:].split("."):
+            if not segment:
+                continue
+            for match in re.finditer(r"([^\[\]]+)|\[(\d+)\]", segment):
+                key = match.group(1)
+                index = match.group(2)
+                if key is not None:
+                    tokens.append(key)
+                elif index is not None:
+                    tokens.append(int(index))
+
+        current = payload
+        for token in tokens:
+            if isinstance(token, int):
+                if not isinstance(current, (list, tuple)) or token >= len(current):
+                    return _MISSING
+                current = current[token]
+                continue
+            if not isinstance(current, Mapping) or token not in current:
+                return _MISSING
+            current = current[token]
+        return current
 
     def _drop_content_type(self, headers: Dict[str, Any]) -> Dict[str, Any]:
         cleaned = dict(headers)
@@ -279,22 +386,22 @@ class HttpRouteMonitor(BaseMonitorThread):
             self.logger.debug("Удалён заголовок Content-Type: requests сам установит boundary для multipart.")
         return cleaned
 
-    def _basic_auth(self) -> Optional[HTTPBasicAuth]:
-        if not self.config.basic_auth:
+    def _basic_auth(self, config: HttpRouteConfig) -> Optional[HTTPBasicAuth]:
+        if not config.basic_auth:
             return None
-        creds = self.config.basic_auth
+        creds = config.basic_auth
         return HTTPBasicAuth(creds.username, creds.password)
 
-    def _verify_option(self) -> Any:
-        if not self.config.ca_bundle:
-            return self.config.verify_ssl
+    def _verify_option(self, config: HttpRouteConfig) -> Any:
+        if not config.ca_bundle:
+            return config.verify_ssl
 
-        ca_path = Path(self.config.ca_bundle).expanduser()
+        ca_path = Path(config.ca_bundle).expanduser()
         if not ca_path.exists():
             self.logger.warning(
                 "Файл пользовательского сертификата %s не найден, fallback к verify=%s",
                 ca_path,
-                self.config.verify_ssl,
+                config.verify_ssl,
             )
-            return self.config.verify_ssl
+            return config.verify_ssl
         return str(ca_path)

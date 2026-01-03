@@ -14,5 +14,13 @@ routes:
       field_name: attachment
       content_type: application/zip
       zip_enabled: true
+    children:
+      - name: httpbin-upload-followup
+        url: https://httpbin.org/anything/{{$.headers.X-Monitor-Origin}}
+        method: POST
+        json:
+          origin_header: $.headers.X-Monitor-Origin
+          parent_url: $.url
+        max_response_chars: 512
     max_response_chars: 1024
     description: "Загрузка небольшого файла в multipart/form-data."

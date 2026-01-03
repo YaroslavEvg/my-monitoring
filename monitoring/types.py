@@ -56,6 +56,7 @@ class HttpRouteConfig:
     tags: List[str] = field(default_factory=list)
     monitor_type: str = "http"
     source_path: Optional[str] = None
+    children: List["HttpRouteConfig"] = field(default_factory=list)
 
     @classmethod
     def from_dict(
@@ -69,6 +70,13 @@ class HttpRouteConfig:
         timeout = max(float(raw.get("timeout", 10)), 1.0)
         body_limit = int(raw.get("max_response_chars", raw.get("body_max_chars", 2048)))
         json_payload = cls._resolve_json_payload(raw.get("json"), base_dir)
+
+        children_raw = raw.get("children") or []
+        if children_raw and not isinstance(children_raw, list):
+            raise ValueError("Поле children должно быть списком маршрутов")
+        children = [
+            cls.from_dict(entry, source_path=source_path, base_dir=base_dir) for entry in children_raw
+        ]
 
         return cls(
             name=raw["name"],
@@ -95,6 +103,7 @@ class HttpRouteConfig:
             tags=list(raw.get("tags", [])),
             monitor_type=raw.get("type", "http").lower(),
             source_path=source_path,
+            children=children,
         )
 
     @staticmethod
