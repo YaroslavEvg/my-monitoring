@@ -38,6 +38,7 @@ echo "New version: v.$major_version.$minor_version.$path_version.$new_version $c
 
 cloc $(git ls-files)
 cloc $(git ls-files) > summary_code.txt
+git add summary_code.txt
 
 ' >.git/hooks/pre-commit
 
