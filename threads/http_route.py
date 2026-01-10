@@ -43,19 +43,42 @@ class HttpRouteMonitor(BaseMonitorThread):
         self.writer.write_result(self.config, payload)
 
     def _execute_request_chain(self, config: HttpRouteConfig, context: Optional[Any]) -> Dict[str, Any]:
+        results, total_time = self._collect_chain_results(config, context)
+        selected = self._select_chain_result(results)
+        if not selected:
+            return {}
+        payload = dict(selected)
+        payload["response_time_ms"] = round(total_time, 2)
+        return payload
+
+    def _collect_chain_results(
+        self, config: HttpRouteConfig, context: Optional[Any]
+    ) -> tuple[list[Dict[str, Any]], float]:
         result, response_json, has_response = self._execute_request(config, context)
+        results: list[Dict[str, Any]] = [result]
+        total_time = float(result.get("response_time_ms") or 0)
+
         if config.children:
             if not has_response:
                 self.logger.debug("Дочерние запросы для %s пропущены: отсутствует ответ.", config.name)
             else:
-                children = [
-                    self._execute_request_chain(child, response_json)
-                    for child in config.children
-                    if child.enabled
-                ]
-                if children:
-                    result["children"] = children
-        return result
+                for child in config.children:
+                    if not child.enabled:
+                        continue
+                    child_results, child_time = self._collect_chain_results(child, response_json)
+                    results.extend(child_results)
+                    total_time += child_time
+
+        return results, total_time
+
+    @staticmethod
+    def _select_chain_result(results: list[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        for result in results:
+            if not result.get("ok", False):
+                return result
+        if results:
+            return results[-1]
+        return None
 
     def _execute_request(
         self, config: HttpRouteConfig, context: Optional[Any]
