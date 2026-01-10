@@ -37,6 +37,7 @@ git add $version_file
 echo "New version: v.$major_version.$minor_version.$path_version.$new_version $current_date"
 
 cloc $(git ls-files)
+cloc $(git ls-files) > summary_code.txt
 
 ' >.git/hooks/pre-commit
 
