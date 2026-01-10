@@ -3,6 +3,8 @@
 echo '
 
 #!/bin/bash
+../../update_version_script.sh
+
 major_version=1
 minor_version=0
 path_version=0
@@ -37,7 +39,7 @@ git add $version_file
 echo "New version: v.$major_version.$minor_version.$path_version.$new_version $current_date"
 
 cloc $(git ls-files)
-cloc $(git ls-files) > summary_code.txt
+cloc $(git ls-files) | tail -n +2 > summary_code.txt
 git add summary_code.txt
 
 ' >.git/hooks/pre-commit
