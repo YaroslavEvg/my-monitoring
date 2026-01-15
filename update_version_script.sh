@@ -5,7 +5,7 @@ echo '
 #!/bin/bash
 ../../update_version_script.sh
 
-major_version=1
+major_version=2
 minor_version=0
 path_version=0
 # Путь к файлу с номером версии
