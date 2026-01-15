@@ -77,6 +77,8 @@ Python-конструктор для описания HTTP-маршрутов м
 | `encoding_file` | ✖ | Целевая кодировка текстовых файлов перед упаковкой в zip (по умолчанию `utf-8`); используется как `charset` для `text/*` без zip. |
 | `encoding_json` | ✖ | Кодировка сериализованного JSON (multipart и query-параметр), по умолчанию `utf-8`. |
 | `multipart_json_field` | ✖ | Имя поля для JSON-пейлоада внутри multipart (часть без filename, `Content-Type: application/json`). |
+| `multipart_json_fields` | ✖ | Дополнительные JSON-части multipart/form-data (список объектов или словарь `поле -> json`). |
+| `multipart_json_fields[].field_name`, `multipart_json_fields[].json`, `multipart_json_fields[].encoding` | ✖ | Имя поля, JSON-пейлоад (объект или путь), опциональная кодировка части (по умолчанию `encoding_json`). |
 | `json_query_param` | ✖ | Имя query-параметра, в который нужно сериализовать JSON вместо тела. |
 | `max_response_chars` | ✖ | Сколько символов ответа сохранять для анализа. |
 | `basic_auth.username`, `basic_auth.password` | ✖ | Пара логин/пароль для HTTP Basic Auth (заголовок `Authorization`). |
@@ -138,6 +140,18 @@ routes:
 ```
 
 Если одновременно требуется отправить файл и JSON (multipart/form-data), укажите файл в секции `file`, а JSON — как обычно. Монитор соберёт multipart в формате, который работает с требуемым бэкендом: JSON передаётся отдельной частью `application/json` **без** `filename`, файл — обычной частью с именем файла. Это единственный поддерживаемый вариант загрузки файлов. Опция `multipart_json_filename` больше не используется: JSON отправляется без имени файла. При необходимости можно переименовать поле JSON через `multipart_json_field` (по умолчанию `json`) и задать кодировку JSON-части через `encoding_json` (по умолчанию `utf-8`). Если `zip_enabled: false` (значение по умолчанию), файл отправится как есть с исходным именем и указанным `content_type`. Для текстовых `content_type` (начинающихся с `text/`) агент добавит `charset=<encoding_file>`, если он не указан. Если нужно задать другой `charset` вручную, укажи его прямо в `file.content_type` (например, `text/plain; charset=windows-1251`) — тогда он не будет переопределён. Если нужно отправлять файл/каталог как zip, укажите `zip_enabled: true` внутри блока `file` — при этом для не-zip файла будет создан архив `<имя_файла_без_расширения>.zip`, для каталога — `<имя_папки>.zip`, содержимое перекодируется в `encoding_file` (по умолчанию `utf-8`) при возможности. Для каталога `zip_enabled` обязателен. Архив создаётся в отдельной временной папке перед каждым запросом и удаляется после него.
+
+Если требуется multipart только с JSON-частями (например, два разных JSON в разных полях), используйте `multipart_json_fields`. Каждая часть может иметь свою кодировку через `encoding` (если не указана — используется `encoding_json`).
+
+```yaml
+multipart_json_fields:
+  - field_name: meta
+    json:
+      source: monitoring
+  - field_name: payload
+    json: payloads/request.json
+    encoding: utf-8
+```
 
 ```yaml
 file:

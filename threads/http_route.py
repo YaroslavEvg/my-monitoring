@@ -93,6 +93,15 @@ class HttpRouteMonitor(BaseMonitorThread):
         try:
             with ExitStack() as stack:
                 files = self._prepare_files(stack, config)
+                extra_json_parts = self._prepare_multipart_json_fields(config, context)
+                if extra_json_parts:
+                    files = files or {}
+                    for field_name, part in extra_json_parts.items():
+                        if field_name in files:
+                            self.logger.debug(
+                                "Поле %s уже существует среди files и будет перезаписано JSON-частью.", field_name
+                            )
+                        files[field_name] = part
                 data = self._resolve_value(config.data, context)
                 json_payload = self._resolve_value(config.json_body, context)
                 params = self._resolve_mapping(config.params, context)
@@ -218,15 +227,30 @@ class HttpRouteMonitor(BaseMonitorThread):
         if field_name in files_copy:
             self.logger.debug("Поле %s уже существует среди files и будет перезаписано JSON-частью.", field_name)
 
-        effective_encoding = config.encoding_json or "utf-8"
+        files_copy[field_name] = self._build_json_part(payload, config.encoding_json)
+        return files_copy
+
+    def _prepare_multipart_json_fields(
+        self, config: HttpRouteConfig, context: Optional[Any]
+    ) -> Dict[str, Any]:
+        if not config.multipart_json_fields:
+            return {}
+        parts: Dict[str, Any] = {}
+        for field in config.multipart_json_fields:
+            payload = self._resolve_value(field.payload, context)
+            encoding = field.encoding or config.encoding_json
+            parts[field.field_name] = self._build_json_part(payload, encoding)
+        return parts
+
+    def _build_json_part(self, payload: Any, encoding: Optional[str]) -> tuple[None, Any, str]:
+        effective_encoding = encoding or "utf-8"
         encoded_json = self._encode_json_field(payload, encoding=effective_encoding, as_bytes=True)
         content_type = f"application/json; charset={effective_encoding}"
-        files_copy[field_name] = (
+        return (
             None,
             encoded_json,
             content_type,
         )
-        return files_copy
 
     @staticmethod
     def _encode_json_field(payload: Any, encoding: Optional[str] = None, as_bytes: bool = False) -> Any:

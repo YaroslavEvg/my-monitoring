@@ -21,6 +21,15 @@ class FileUploadConfig:
 
 
 @dataclass
+class MultipartJsonField:
+    """JSON-часть внутри multipart/form-data."""
+
+    field_name: str
+    payload: Any
+    encoding: Optional[str] = None
+
+
+@dataclass
 class BasicAuthConfig:
     """Пара логина/пароля для базовой авторизации."""
 
@@ -50,6 +59,7 @@ class HttpRouteConfig:
     file_upload: Optional[FileUploadConfig] = None
     basic_auth: Optional[BasicAuthConfig] = None
     multipart_json_field: Optional[str] = None
+    multipart_json_fields: List[MultipartJsonField] = field(default_factory=list)
     json_query_param: Optional[str] = None
     encoding_file: str = "utf-8"
     encoding_json: str = "utf-8"
@@ -71,6 +81,10 @@ class HttpRouteConfig:
         body_limit = int(raw.get("max_response_chars", raw.get("body_max_chars", 2048)))
         json_payload = cls._resolve_json_payload(raw.get("json"), base_dir)
 
+        multipart_json_fields = cls._parse_multipart_json_fields(
+            raw.get("multipart_json_fields") or raw.get("multipart_json"),
+            base_dir,
+        )
         children_raw = raw.get("children") or []
         if children_raw and not isinstance(children_raw, list):
             raise ValueError("Поле children должно быть списком маршрутов")
@@ -97,6 +111,7 @@ class HttpRouteConfig:
             file_upload=file_upload,
             basic_auth=basic_auth,
             multipart_json_field=raw.get("multipart_json_field") or raw.get("json_field"),
+            multipart_json_fields=multipart_json_fields,
             json_query_param=raw.get("json_query_param") or raw.get("json_param"),
             encoding_file=raw.get("encoding_file") or raw.get("encondig_file") or "utf-8",
             encoding_json=raw.get("encoding_json") or raw.get("encondig_json") or "utf-8",
@@ -134,3 +149,35 @@ class HttpRouteConfig:
                     raise ValueError(f"Invalid JSON content in {file_path}: {exc}") from exc
 
         return payload
+
+    @classmethod
+    def _parse_multipart_json_fields(
+        cls, raw_value: Any, base_dir: Optional[Path]
+    ) -> List[MultipartJsonField]:
+        if not raw_value:
+            return []
+        if isinstance(raw_value, Mapping):
+            fields: List[MultipartJsonField] = []
+            for field_name, payload in raw_value.items():
+                resolved_payload = cls._resolve_json_payload(payload, base_dir)
+                fields.append(MultipartJsonField(field_name=str(field_name), payload=resolved_payload))
+            return fields
+        if not isinstance(raw_value, list):
+            raise ValueError("Поле multipart_json_fields должно быть списком или словарём")
+
+        fields = []
+        for entry in raw_value:
+            if not isinstance(entry, Mapping):
+                raise ValueError("Элемент multipart_json_fields должен быть объектом")
+            field_name = entry.get("field_name") or entry.get("field") or entry.get("name")
+            if not field_name:
+                raise ValueError("В multipart_json_fields требуется field_name")
+            payload_raw = entry.get("json")
+            if payload_raw is None and "payload" in entry:
+                payload_raw = entry.get("payload")
+            resolved_payload = cls._resolve_json_payload(payload_raw, base_dir)
+            encoding = entry.get("encoding")
+            fields.append(
+                MultipartJsonField(field_name=str(field_name), payload=resolved_payload, encoding=encoding)
+            )
+        return fields
