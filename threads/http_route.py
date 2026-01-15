@@ -52,9 +52,10 @@ class HttpRouteMonitor(BaseMonitorThread):
         return payload
 
     def _collect_chain_results(
-        self, config: HttpRouteConfig, context: Optional[Any]
+        self, config: HttpRouteConfig, context: Optional[Any], parent_children_delay: float = 0.0
     ) -> tuple[list[Dict[str, Any]], float]:
-        result, response_json, has_response = self._execute_request(config, context)
+        effective_delay = config.delay_before if config.delay_before is not None else parent_children_delay
+        result, response_json, has_response = self._execute_request(config, context, pre_delay=effective_delay)
         results: list[Dict[str, Any]] = [result]
         total_time = float(result.get("response_time_ms") or 0)
 
@@ -65,7 +66,9 @@ class HttpRouteMonitor(BaseMonitorThread):
                 for child in config.children:
                     if not child.enabled:
                         continue
-                    child_results, child_time = self._collect_chain_results(child, response_json)
+                    child_results, child_time = self._collect_chain_results(
+                        child, response_json, parent_children_delay=config.children_delay
+                    )
                     results.extend(child_results)
                     total_time += child_time
 
@@ -81,6 +84,54 @@ class HttpRouteMonitor(BaseMonitorThread):
         return None
 
     def _execute_request(
+        self, config: HttpRouteConfig, context: Optional[Any], pre_delay: float = 0.0
+    ) -> tuple[Dict[str, Any], Optional[Any], bool]:
+        wait_for = config.wait_for
+        attempts = wait_for.attempts if wait_for else 1
+        total_time = 0.0
+        if pre_delay:
+            self._sleep(pre_delay)
+            total_time += pre_delay * 1000
+
+        last_result: Optional[Dict[str, Any]] = None
+        last_json: Optional[Any] = None
+        has_response = False
+        wait_failed = False
+
+        for attempt in range(attempts):
+            result, response_json, has_response = self._execute_request_once(config, context)
+            last_result = result
+            last_json = response_json
+            total_time += float(result.get("response_time_ms") or 0)
+
+            if not wait_for:
+                break
+
+            if has_response and response_json is not None:
+                extracted = self._extract_json_path(response_json, wait_for.path)
+                if extracted is not _MISSING:
+                    wait_failed = False
+                    break
+            wait_failed = True
+            if attempt < attempts - 1:
+                self._sleep(wait_for.delay)
+                total_time += wait_for.delay * 1000
+
+        if last_result is None:
+            return {}, None, False
+
+        if wait_for:
+            last_result["response_time_ms"] = round(total_time, 2)
+            if wait_failed:
+                if last_result.get("ok", True):
+                    last_result["ok"] = False
+                if not last_result.get("error"):
+                    last_result["error"] = (
+                        f"Не найден путь {wait_for.path} после {attempts} попыток"
+                    )
+        return last_result, last_json, has_response
+
+    def _execute_request_once(
         self, config: HttpRouteConfig, context: Optional[Any]
     ) -> tuple[Dict[str, Any], Optional[Any], bool]:
         timestamp = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
@@ -348,6 +399,11 @@ class HttpRouteMonitor(BaseMonitorThread):
             return response.json()
         except ValueError:
             return None
+
+    def _sleep(self, seconds: float) -> None:
+        if seconds <= 0:
+            return
+        self.stop_event.wait(seconds)
 
     @staticmethod
     def _empty_to_none(value: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:

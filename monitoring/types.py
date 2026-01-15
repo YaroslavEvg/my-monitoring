@@ -30,6 +30,15 @@ class MultipartJsonField:
 
 
 @dataclass
+class WaitForConfig:
+    """Ожидание появления поля в JSON-ответе."""
+
+    path: str
+    attempts: int = 1
+    delay: float = 0.0
+
+
+@dataclass
 class BasicAuthConfig:
     """Пара логина/пароля для базовой авторизации."""
 
@@ -63,6 +72,9 @@ class HttpRouteConfig:
     json_query_param: Optional[str] = None
     encoding_file: str = "utf-8"
     encoding_json: str = "utf-8"
+    delay_before: Optional[float] = None
+    children_delay: float = 0.0
+    wait_for: Optional[WaitForConfig] = None
     tags: List[str] = field(default_factory=list)
     monitor_type: str = "http"
     source_path: Optional[str] = None
@@ -85,6 +97,9 @@ class HttpRouteConfig:
             raw.get("multipart_json_fields") or raw.get("multipart_json"),
             base_dir,
         )
+        wait_for = cls._parse_wait_for(raw.get("wait_for"))
+        delay_before = cls._parse_delay(raw.get("delay_before") or raw.get("pre_delay"))
+        children_delay = cls._parse_delay(raw.get("children_delay") or raw.get("children_timeout")) or 0.0
         children_raw = raw.get("children") or []
         if children_raw and not isinstance(children_raw, list):
             raise ValueError("Поле children должно быть списком маршрутов")
@@ -115,6 +130,9 @@ class HttpRouteConfig:
             json_query_param=raw.get("json_query_param") or raw.get("json_param"),
             encoding_file=raw.get("encoding_file") or raw.get("encondig_file") or "utf-8",
             encoding_json=raw.get("encoding_json") or raw.get("encondig_json") or "utf-8",
+            delay_before=delay_before,
+            children_delay=children_delay,
+            wait_for=wait_for,
             tags=list(raw.get("tags", [])),
             monitor_type=raw.get("type", "http").lower(),
             source_path=source_path,
@@ -181,3 +199,26 @@ class HttpRouteConfig:
                 MultipartJsonField(field_name=str(field_name), payload=resolved_payload, encoding=encoding)
             )
         return fields
+
+    @staticmethod
+    def _parse_wait_for(raw_value: Any) -> Optional[WaitForConfig]:
+        if not raw_value:
+            return None
+        if isinstance(raw_value, str):
+            return WaitForConfig(path=raw_value)
+        if not isinstance(raw_value, Mapping):
+            raise ValueError("Поле wait_for должно быть строкой или объектом")
+
+        path = raw_value.get("path") or raw_value.get("json_path") or raw_value.get("field")
+        if not path:
+            raise ValueError("В wait_for требуется path")
+        attempts = max(int(raw_value.get("attempts", raw_value.get("retries", 1))), 1)
+        delay = max(float(raw_value.get("delay", raw_value.get("interval", 0))), 0.0)
+        return WaitForConfig(path=str(path), attempts=attempts, delay=delay)
+
+    @staticmethod
+    def _parse_delay(raw_value: Any) -> Optional[float]:
+        if raw_value is None:
+            return None
+        delay = max(float(raw_value), 0.0)
+        return delay
