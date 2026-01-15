@@ -199,6 +199,8 @@ class HttpRouteMonitor(BaseMonitorThread):
             file_path = archive_path
             filename = archive_path.name
             content_type = "application/zip"
+        if not should_zip and self._is_text_content_type(content_type):
+            content_type = self._ensure_text_charset(content_type, config.encoding_file)
 
         file_obj = stack.enter_context(open(file_path, "rb"))
         return {
@@ -274,6 +276,17 @@ class HttpRouteMonitor(BaseMonitorThread):
             return text.encode(target_encoding)
         except (LookupError, UnicodeEncodeError):
             return raw
+
+    @staticmethod
+    def _is_text_content_type(content_type: str) -> bool:
+        return content_type.strip().lower().startswith("text/")
+
+    @staticmethod
+    def _ensure_text_charset(content_type: str, encoding: Optional[str]) -> str:
+        if "charset=" in content_type.lower():
+            return content_type
+        effective = encoding or "utf-8"
+        return f"{content_type}; charset={effective}"
 
     @staticmethod
     def _build_zip(source: Path, target: Path, target_encoding: Optional[str]) -> None:
