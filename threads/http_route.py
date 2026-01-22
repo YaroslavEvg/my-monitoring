@@ -466,19 +466,82 @@ class HttpRouteMonitor(BaseMonitorThread):
             return payload
         if not raw.startswith("$."):
             return _MISSING
+        tokens = HttpRouteMonitor._tokenize_path(raw[2:])
+        return HttpRouteMonitor._extract_tokens(payload, tokens)
 
+    @staticmethod
+    def _tokenize_path(path: str) -> list[Any]:
         tokens: list[Any] = []
-        for segment in raw[2:].split("."):
+        for segment in path.split("."):
             if not segment:
                 continue
-            for match in re.finditer(r"([^\[\]]+)|\[(\d+)\]", segment):
-                key = match.group(1)
-                index = match.group(2)
-                if key is not None:
-                    tokens.append(key)
-                elif index is not None:
-                    tokens.append(int(index))
+            tokens.extend(HttpRouteMonitor._tokenize_segment(segment))
+        return tokens
 
+    @staticmethod
+    def _tokenize_segment(segment: str) -> list[Any]:
+        tokens: list[Any] = []
+        idx = segment.find("[")
+        if idx == -1:
+            tokens.append(segment)
+            return tokens
+
+        base = segment[:idx]
+        if base:
+            tokens.append(base)
+
+        cursor = idx
+        while cursor < len(segment) and segment[cursor] == "[":
+            end = segment.find("]", cursor + 1)
+            if end == -1:
+                break
+            content = segment[cursor + 1 : end].strip()
+            token = HttpRouteMonitor._parse_bracket_token(content)
+            if token is not None:
+                tokens.append(token)
+            cursor = end + 1
+        return tokens
+
+    @staticmethod
+    def _parse_bracket_token(content: str) -> Optional[Any]:
+        if not content:
+            return None
+        if content.isdigit():
+            return int(content)
+        if "==" in content:
+            left, right = content.split("==", 1)
+            return ("filter", left.strip(), HttpRouteMonitor._parse_literal(right.strip()))
+        if "=" in content:
+            left, right = content.split("=", 1)
+            return ("filter", left.strip(), HttpRouteMonitor._parse_literal(right.strip()))
+        return content
+
+    @staticmethod
+    def _parse_literal(raw: str) -> Any:
+        if not raw:
+            return ""
+        if raw[0] in {"'", '"'} and raw[-1] == raw[0]:
+            quote = raw[0]
+            inner = raw[1:-1]
+            inner = inner.replace("\\\\", "\\")
+            inner = inner.replace(f"\\{quote}", quote)
+            return inner
+        lowered = raw.lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        if lowered == "null":
+            return None
+        try:
+            if "." in raw:
+                return float(raw)
+            return int(raw)
+        except ValueError:
+            return raw
+
+    @staticmethod
+    def _extract_tokens(payload: Any, tokens: list[Any]) -> Any:
         current = payload
         for token in tokens:
             if isinstance(token, int):
@@ -486,10 +549,38 @@ class HttpRouteMonitor(BaseMonitorThread):
                     return _MISSING
                 current = current[token]
                 continue
+            if isinstance(token, tuple) and token and token[0] == "filter":
+                current = HttpRouteMonitor._select_from_list(current, token)
+                if current is _MISSING:
+                    return _MISSING
+                continue
             if not isinstance(current, Mapping) or token not in current:
                 return _MISSING
             current = current[token]
         return current
+
+    @staticmethod
+    def _extract_relative(payload: Any, path: str) -> Any:
+        raw = path.strip()
+        if raw in {"", "$"}:
+            return payload
+        if raw.startswith("$."):
+            raw = raw[2:]
+        tokens = HttpRouteMonitor._tokenize_path(raw)
+        return HttpRouteMonitor._extract_tokens(payload, tokens)
+
+    @staticmethod
+    def _select_from_list(current: Any, token: tuple[str, str, Any]) -> Any:
+        if not isinstance(current, (list, tuple)):
+            return _MISSING
+        _, key_path, expected = token
+        for item in current:
+            value = HttpRouteMonitor._extract_relative(item, key_path)
+            if value is _MISSING:
+                continue
+            if value == expected:
+                return item
+        return _MISSING
 
     def _drop_content_type(self, headers: Dict[str, Any]) -> Dict[str, Any]:
         cleaned = dict(headers)
