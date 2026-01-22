@@ -93,10 +93,12 @@ class HttpRouteConfig:
         body_limit = int(raw.get("max_response_chars", raw.get("body_max_chars", 2048)))
         json_payload = cls._resolve_json_payload(raw.get("json"), base_dir)
 
+        # multipart_json_fields допускает краткую запись в виде словаря.
         multipart_json_fields = cls._parse_multipart_json_fields(
             raw.get("multipart_json_fields") or raw.get("multipart_json"),
             base_dir,
         )
+        # wait_for можно задавать строкой или объектом.
         wait_for = cls._parse_wait_for(raw.get("wait_for"))
         delay_before = cls._parse_delay(raw.get("delay_before") or raw.get("pre_delay"))
         children_delay = cls._parse_delay(raw.get("children_delay") or raw.get("children_timeout")) or 0.0
@@ -175,6 +177,7 @@ class HttpRouteConfig:
         if not raw_value:
             return []
         if isinstance(raw_value, Mapping):
+            # Короткая форма: поле -> JSON/путь.
             fields: List[MultipartJsonField] = []
             for field_name, payload in raw_value.items():
                 resolved_payload = cls._resolve_json_payload(payload, base_dir)

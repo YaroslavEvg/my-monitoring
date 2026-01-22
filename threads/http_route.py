@@ -43,6 +43,7 @@ class HttpRouteMonitor(BaseMonitorThread):
         self.writer.write_result(self.config, payload)
 
     def _execute_request_chain(self, config: HttpRouteConfig, context: Optional[Any]) -> Dict[str, Any]:
+        # Собираем всю цепочку и оставляем в результате только один «ключевой» запрос.
         results, total_time = self._collect_chain_results(config, context)
         selected = self._select_chain_result(results)
         if not selected:
@@ -54,6 +55,7 @@ class HttpRouteMonitor(BaseMonitorThread):
     def _collect_chain_results(
         self, config: HttpRouteConfig, context: Optional[Any], parent_children_delay: float = 0.0
     ) -> tuple[list[Dict[str, Any]], float]:
+        # Наследуем задержку от родителя, если у ребёнка нет своего delay_before.
         effective_delay = config.delay_before if config.delay_before is not None else parent_children_delay
         result, response_json, has_response = self._execute_request(config, context, pre_delay=effective_delay)
         results: list[Dict[str, Any]] = [result]
@@ -98,6 +100,7 @@ class HttpRouteMonitor(BaseMonitorThread):
         has_response = False
         wait_failed = False
 
+        # Повторяем запрос до появления нужного поля в JSON (или до исчерпания попыток).
         for attempt in range(attempts):
             result, response_json, has_response = self._execute_request_once(config, context)
             last_result = result
@@ -145,6 +148,7 @@ class HttpRouteMonitor(BaseMonitorThread):
             with ExitStack() as stack:
                 files = self._prepare_files(stack, config)
                 extra_json_parts = self._prepare_multipart_json_fields(config, context)
+                # Дополнительные JSON-части добавляем в multipart до обработки основного json.
                 if extra_json_parts:
                     files = files or {}
                     for field_name, part in extra_json_parts.items():
@@ -433,6 +437,7 @@ class HttpRouteMonitor(BaseMonitorThread):
         if context is None:
             return value
         raw = value.strip()
+        # Если строка — это путь $.*, подставляем сразу значение, не строку.
         if raw == "$" or raw.startswith("$."):
             extracted = self._extract_json_path(context, raw)
             if extracted is not _MISSING:
@@ -487,6 +492,7 @@ class HttpRouteMonitor(BaseMonitorThread):
                 tokens.extend(HttpRouteMonitor._tokenize_segment(buffer))
                 buffer = ""
 
+        # Разбиваем путь по точкам, игнорируя точки внутри [] и кавычек.
         for ch in path:
             if escape:
                 buffer += ch
@@ -585,6 +591,7 @@ class HttpRouteMonitor(BaseMonitorThread):
             return None
         if content.isdigit():
             return int(content)
+        # В [] допускаются фильтры вида key=value и несколько условий через &.
         conditions = HttpRouteMonitor._split_conditions(content)
         if conditions:
             parsed: list[tuple[str, Any]] = []
@@ -760,6 +767,7 @@ class HttpRouteMonitor(BaseMonitorThread):
     def _select_from_list(current: Any, token: tuple[str, str, Any]) -> Any:
         if not isinstance(current, (list, tuple)):
             return _MISSING
+        # Возвращаем первый элемент списка, удовлетворяющий всем условиям фильтра.
         kind = token[0]
         if kind == "filter":
             _, key_path, expected = token
