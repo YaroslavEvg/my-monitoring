@@ -3,7 +3,6 @@
 echo '
 
 #!/bin/bash
-../../update_version_script.sh
 
 major_version=2
 minor_version=0

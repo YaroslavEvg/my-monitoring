@@ -464,18 +464,60 @@ class HttpRouteMonitor(BaseMonitorThread):
         raw = path.strip()
         if raw == "$":
             return payload
-        if not raw.startswith("$."):
+        if raw.startswith("$."):
+            path_value = raw[2:]
+        elif raw.startswith("$["):
+            path_value = raw[1:]
+        else:
             return _MISSING
-        tokens = HttpRouteMonitor._tokenize_path(raw[2:])
+        tokens = HttpRouteMonitor._tokenize_path(path_value)
         return HttpRouteMonitor._extract_tokens(payload, tokens)
 
     @staticmethod
     def _tokenize_path(path: str) -> list[Any]:
         tokens: list[Any] = []
-        for segment in path.split("."):
-            if not segment:
+        buffer = ""
+        depth = 0
+        in_quote: Optional[str] = None
+        escape = False
+
+        def flush_buffer() -> None:
+            nonlocal buffer
+            if buffer:
+                tokens.extend(HttpRouteMonitor._tokenize_segment(buffer))
+                buffer = ""
+
+        for ch in path:
+            if escape:
+                buffer += ch
+                escape = False
                 continue
-            tokens.extend(HttpRouteMonitor._tokenize_segment(segment))
+            if in_quote:
+                if ch == "\\":
+                    buffer += ch
+                    escape = True
+                    continue
+                if ch == in_quote:
+                    in_quote = None
+                buffer += ch
+                continue
+            if ch in {"'", '"'}:
+                in_quote = ch
+                buffer += ch
+                continue
+            if ch == "[":
+                depth += 1
+                buffer += ch
+                continue
+            if ch == "]":
+                depth = max(depth - 1, 0)
+                buffer += ch
+                continue
+            if ch == "." and depth == 0:
+                flush_buffer()
+                continue
+            buffer += ch
+        flush_buffer()
         return tokens
 
     @staticmethod
@@ -492,15 +534,50 @@ class HttpRouteMonitor(BaseMonitorThread):
 
         cursor = idx
         while cursor < len(segment) and segment[cursor] == "[":
-            end = segment.find("]", cursor + 1)
-            if end == -1:
+            content, next_cursor = HttpRouteMonitor._read_bracket_content(segment, cursor)
+            if content is None:
                 break
-            content = segment[cursor + 1 : end].strip()
             token = HttpRouteMonitor._parse_bracket_token(content)
             if token is not None:
                 tokens.append(token)
-            cursor = end + 1
+            cursor = next_cursor
         return tokens
+
+    @staticmethod
+    def _read_bracket_content(text: str, start: int) -> tuple[Optional[str], int]:
+        if start >= len(text) or text[start] != "[":
+            return None, start
+        depth = 1
+        in_quote: Optional[str] = None
+        escape = False
+        cursor = start + 1
+        while cursor < len(text):
+            ch = text[cursor]
+            if escape:
+                escape = False
+                cursor += 1
+                continue
+            if in_quote:
+                if ch == "\\":
+                    escape = True
+                    cursor += 1
+                    continue
+                if ch == in_quote:
+                    in_quote = None
+                cursor += 1
+                continue
+            if ch in {"'", '"'}:
+                in_quote = ch
+                cursor += 1
+                continue
+            if ch == "[":
+                depth += 1
+            elif ch == "]":
+                depth -= 1
+                if depth == 0:
+                    return text[start + 1 : cursor].strip(), cursor + 1
+            cursor += 1
+        return None, cursor
 
     @staticmethod
     def _parse_bracket_token(content: str) -> Optional[Any]:
@@ -508,13 +585,116 @@ class HttpRouteMonitor(BaseMonitorThread):
             return None
         if content.isdigit():
             return int(content)
-        if "==" in content:
-            left, right = content.split("==", 1)
-            return ("filter", left.strip(), HttpRouteMonitor._parse_literal(right.strip()))
-        if "=" in content:
-            left, right = content.split("=", 1)
-            return ("filter", left.strip(), HttpRouteMonitor._parse_literal(right.strip()))
+        conditions = HttpRouteMonitor._split_conditions(content)
+        if conditions:
+            parsed: list[tuple[str, Any]] = []
+            for condition in conditions:
+                left, right = HttpRouteMonitor._split_condition(condition)
+                if left is None:
+                    return content
+                parsed.append((left, HttpRouteMonitor._parse_literal(right)))
+            if len(parsed) == 1:
+                left, right = parsed[0]
+                return ("filter", left, right)
+            return ("filter_all", parsed)
         return content
+
+    @staticmethod
+    def _split_conditions(content: str) -> list[str]:
+        parts: list[str] = []
+        buffer = ""
+        depth = 0
+        in_quote: Optional[str] = None
+        escape = False
+        cursor = 0
+        while cursor < len(content):
+            ch = content[cursor]
+            if escape:
+                buffer += ch
+                escape = False
+                cursor += 1
+                continue
+            if in_quote:
+                if ch == "\\":
+                    buffer += ch
+                    escape = True
+                    cursor += 1
+                    continue
+                if ch == in_quote:
+                    in_quote = None
+                buffer += ch
+                cursor += 1
+                continue
+            if ch in {"'", '"'}:
+                in_quote = ch
+                buffer += ch
+                cursor += 1
+                continue
+            if ch == "[":
+                depth += 1
+                buffer += ch
+                cursor += 1
+                continue
+            if ch == "]":
+                depth = max(depth - 1, 0)
+                buffer += ch
+                cursor += 1
+                continue
+            if depth == 0 and ch == "&":
+                if buffer.strip():
+                    parts.append(buffer.strip())
+                buffer = ""
+                while cursor < len(content) and content[cursor] == "&":
+                    cursor += 1
+                continue
+            buffer += ch
+            cursor += 1
+        if buffer.strip():
+            parts.append(buffer.strip())
+        return parts
+
+    @staticmethod
+    def _split_condition(condition: str) -> tuple[Optional[str], str]:
+        depth = 0
+        in_quote: Optional[str] = None
+        escape = False
+        cursor = 0
+        while cursor < len(condition):
+            ch = condition[cursor]
+            if escape:
+                escape = False
+                cursor += 1
+                continue
+            if in_quote:
+                if ch == "\\":
+                    escape = True
+                    cursor += 1
+                    continue
+                if ch == in_quote:
+                    in_quote = None
+                cursor += 1
+                continue
+            if ch in {"'", '"'}:
+                in_quote = ch
+                cursor += 1
+                continue
+            if ch == "[":
+                depth += 1
+                cursor += 1
+                continue
+            if ch == "]":
+                depth = max(depth - 1, 0)
+                cursor += 1
+                continue
+            if depth == 0 and ch == "=":
+                left = condition[:cursor].strip()
+                if cursor + 1 < len(condition) and condition[cursor + 1] == "=":
+                    right = condition[cursor + 2 :].strip()
+                else:
+                    right = condition[cursor + 1 :].strip()
+                return left, right
+            cursor += 1
+        return None, ""
 
     @staticmethod
     def _parse_literal(raw: str) -> Any:
@@ -554,6 +734,11 @@ class HttpRouteMonitor(BaseMonitorThread):
                 if current is _MISSING:
                     return _MISSING
                 continue
+            if isinstance(token, tuple) and token and token[0] == "filter_all":
+                current = HttpRouteMonitor._select_from_list(current, token)
+                if current is _MISSING:
+                    return _MISSING
+                continue
             if not isinstance(current, Mapping) or token not in current:
                 return _MISSING
             current = current[token]
@@ -566,6 +751,8 @@ class HttpRouteMonitor(BaseMonitorThread):
             return payload
         if raw.startswith("$."):
             raw = raw[2:]
+        elif raw.startswith("$["):
+            raw = raw[1:]
         tokens = HttpRouteMonitor._tokenize_path(raw)
         return HttpRouteMonitor._extract_tokens(payload, tokens)
 
@@ -573,12 +760,20 @@ class HttpRouteMonitor(BaseMonitorThread):
     def _select_from_list(current: Any, token: tuple[str, str, Any]) -> Any:
         if not isinstance(current, (list, tuple)):
             return _MISSING
-        _, key_path, expected = token
+        kind = token[0]
+        if kind == "filter":
+            _, key_path, expected = token
+            conditions = [(key_path, expected)]
+        else:
+            _, conditions = token
         for item in current:
-            value = HttpRouteMonitor._extract_relative(item, key_path)
-            if value is _MISSING:
-                continue
-            if value == expected:
+            matched = True
+            for key_path, expected in conditions:
+                value = HttpRouteMonitor._extract_relative(item, key_path)
+                if value is _MISSING or value != expected:
+                    matched = False
+                    break
+            if matched:
                 return item
         return _MISSING
 
