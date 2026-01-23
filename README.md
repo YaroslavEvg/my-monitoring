@@ -24,6 +24,8 @@ Python-конструктор для описания HTTP-маршрутов м
    └── examples/
        ├── custom_ca.yaml
        ├── env.yaml
+       ├── env_file.env
+       ├── env_file.yaml
        └── groovy_style.yaml
    ```
 3. Разовая проверка с подробным логом:
@@ -43,6 +45,7 @@ Python-конструктор для описания HTTP-маршрутов м
 | --- | --- | --- |
 | `--config` | `config/routes` | Можно указать файл или каталог. |
 | `--results-path` | `monitoring_results.json` | Файл или каталог (см. ниже). |
+| `--env-file` | не задано | Путь к файлу `.env` (можно указывать несколько). |
 | `--log-level` | `INFO` | Измените на `DEBUG` для подробного вывода. |
 | `--one-shot` | `false` | По умолчанию выполняет мониторинг постоянно. |
 | `method` | `GET` | Определяется для каждого маршрута. |
@@ -122,7 +125,7 @@ json: payloads/create-request.json
 перекрывает глобальные.
 
 Подстановка применяется ко всем строковым полям маршрута: `url`, `headers`, `params`, `data`, `json`,
-`basic_auth`, а также к содержимому JSON-файлов, указанных в `json`.
+`basic_auth`, `file.path`, `file.content_type`, а также к содержимому JSON-файлов, указанных в `json`.
 
 `env` наследуется детьми: можно задавать значения на корневом маршруте и переопределять их у дочерних.
 Если переменная не найдена, строка остаётся без изменений.
@@ -146,6 +149,25 @@ routes:
     env:
       USER_ID: 42
     url: https://api.example.org/users/${USER_ID}
+```
+
+Если удобнее хранить переменные в `.env`, используйте `--env-file` (опция может повторяться, значения
+читаются сверху вниз и перекрывают окружение). Формат поддерживает `KEY=VALUE`, `export KEY=VALUE`,
+кавычки и комментарии `#`. Значения могут ссылаться на другие переменные через `${VAR}`.
+
+Пример запуска:
+```bash
+python3 main.py --env-file config/routes/examples/env_file.env --config config/routes/examples/env_file.yaml
+```
+
+Пример `.env`:
+```env
+API_HOST=https://httpbin.org
+BASE_PATH=/anything
+FULL_URL=${API_HOST}${BASE_PATH}
+API_TOKEN=demo-token
+DEMO_USER=demo
+DEMO_MSG=hello
 ```
 
 #### Дочерние запросы и подстановки из ответа

@@ -8,6 +8,7 @@ import sys
 import time
 from pathlib import Path
 from threading import Event
+from typing import Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -15,6 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import init
 from monitoring.config import MonitoringConfig, load_config
+from monitoring.env import apply_env
 from monitoring.persistence import ResultWriter
 from threads.factory import build_monitors
 
@@ -36,6 +38,12 @@ def parse_args() -> argparse.Namespace:
         help="Path to a JSON file or directory where probe results will be stored",
     )
     parser.add_argument(
+        "--env-file",
+        action="append",
+        default=[],
+        help="Path to .env file with KEY=VALUE entries (can be repeated)",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         help="Logging level (DEBUG, INFO, etc.)",
@@ -51,6 +59,74 @@ def parse_args() -> argparse.Namespace:
         help="Run every monitor once and exit (useful for ad-hoc checks)",
     )
     return parser.parse_args()
+
+
+def _load_env_files(paths: list[str]) -> None:
+    if not paths:
+        return
+    env_map = dict(os.environ)
+    for raw_path in paths:
+        path = Path(raw_path).expanduser()
+        if not path.exists():
+            raise FileNotFoundError(f".env file not found: {path}")
+        file_env = _parse_env_file(path, env_map)
+        env_map.update(file_env)
+    os.environ.update({key: str(value) for key, value in env_map.items()})
+
+
+def _parse_env_file(path: Path, base_env: dict[str, str]) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        item = _parse_env_line(line)
+        if not item:
+            continue
+        key, raw_value = item
+        resolved_value = apply_env(raw_value, {**base_env, **parsed})
+        parsed[key] = str(resolved_value)
+    return parsed
+
+
+def _parse_env_line(line: str) -> Optional[tuple[str, str]]:
+    raw = line.strip()
+    if not raw or raw.startswith("#"):
+        return None
+    if raw.startswith("export "):
+        raw = raw[7:].strip()
+    if "=" not in raw:
+        return None
+    key, value = raw.split("=", 1)
+    key = key.strip()
+    if not key:
+        return None
+    return key, _parse_env_value(value)
+
+
+def _parse_env_value(value: str) -> str:
+    raw = value.strip()
+    if not raw:
+        return ""
+    if raw[0] in {"'", '"'}:
+        quote = raw[0]
+        buf = []
+        escape = False
+        for ch in raw[1:]:
+            if escape:
+                buf.append(ch)
+                escape = False
+                continue
+            if quote == '"' and ch == "\\":
+                escape = True
+                continue
+            if ch == quote:
+                break
+            buf.append(ch)
+        return "".join(buf)
+    buf = []
+    for idx, ch in enumerate(raw):
+        if ch == "#" and (idx == 0 or raw[idx - 1].isspace()):
+            break
+        buf.append(ch)
+    return "".join(buf).strip()
 
 
 def configure_timezone(default_tz: str = DEFAULT_TZ) -> str:
@@ -84,6 +160,11 @@ def _wait_for(monitors, stop_event: Event, one_shot: bool) -> None:
 
 def main() -> int:
     args = parse_args()
+    try:
+        _load_env_files(args.env_file)
+    except Exception as exc:  # noqa: BLE001
+        print(f"Failed to load .env files: {exc}", file=sys.stderr)
+        return 1
     configure_timezone()
     log_files = [args.log_file] if args.log_file else None
     init.init_logging(args.log_level, log_files=log_files)

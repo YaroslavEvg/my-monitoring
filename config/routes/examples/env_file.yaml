@@ -1,0 +1,7 @@
+routes:
+  - name: env-file-demo
+    url: ${FULL_URL}/${DEMO_USER}
+    method: POST
+    headers:
+      Authorization: Bearer ${API_TOKEN}
+    json: payloads/env_payload.json
