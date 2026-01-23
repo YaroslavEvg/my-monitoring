@@ -14,6 +14,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - защитный бло
         "`pip install PyYAML` и повторите запуск."
     ) from exc
 
+from .env import build_env_map
 from .types import HttpRouteConfig
 
 SUPPORTED_EXTENSIONS = {".yaml", ".yml", ".json"}
@@ -71,7 +72,9 @@ def _load_routes_from_file(path: Path, source_label: str) -> List[HttpRouteConfi
     raw_config = _read_file(path)
     if "routes" not in raw_config:
         raise ValueError(f"Config file {path} must contain a 'routes' section")
+    env_map = build_env_map(raw_config.get("env"))
     base_dir = path.parent
     return [
-        HttpRouteConfig.from_dict(entry, source_path=source_label, base_dir=base_dir) for entry in raw_config["routes"]
+        HttpRouteConfig.from_dict(entry, source_path=source_label, base_dir=base_dir, env_map=env_map)
+        for entry in raw_config["routes"]
     ]

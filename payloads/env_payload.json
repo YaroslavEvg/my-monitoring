@@ -1,0 +1,4 @@
+{
+  "message": "${DEMO_MSG}",
+  "user": "${DEMO_USER}"
+}

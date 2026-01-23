@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
+from .env import apply_env, build_env_map
+
 
 @dataclass
 class FileUploadConfig:
@@ -82,67 +84,84 @@ class HttpRouteConfig:
 
     @classmethod
     def from_dict(
-        cls, raw: Mapping[str, Any], source_path: Optional[str] = None, base_dir: Optional[Path] = None
+        cls,
+        raw: Mapping[str, Any],
+        source_path: Optional[str] = None,
+        base_dir: Optional[Path] = None,
+        env_map: Optional[Mapping[str, Any]] = None,
     ) -> "HttpRouteConfig":
-        file_config = raw.get("file") or raw.get("file_upload")
-        file_upload = FileUploadConfig(**file_config) if file_config else None
-        auth_config = raw.get("basic_auth") or raw.get("auth")
-        basic_auth = BasicAuthConfig(**auth_config) if auth_config else None
-        interval = max(float(raw.get("interval", 60)), 1.0)
-        timeout = max(float(raw.get("timeout", 10)), 1.0)
-        body_limit = int(raw.get("max_response_chars", raw.get("body_max_chars", 2048)))
-        json_payload = cls._resolve_json_payload(raw.get("json"), base_dir)
-
-        # multipart_json_fields допускает краткую запись в виде словаря.
-        multipart_json_fields = cls._parse_multipart_json_fields(
-            raw.get("multipart_json_fields") or raw.get("multipart_json"),
-            base_dir,
-        )
-        # wait_for можно задавать строкой или объектом.
-        wait_for = cls._parse_wait_for(raw.get("wait_for"))
-        delay_before = cls._parse_delay(raw.get("delay_before") or raw.get("pre_delay"))
-        children_delay = cls._parse_delay(raw.get("children_delay") or raw.get("children_timeout")) or 0.0
+        effective_env = env_map
+        if isinstance(raw, Mapping) and raw.get("env") is not None:
+            effective_env = build_env_map(raw.get("env"), base_env=env_map)
         children_raw = raw.get("children") or []
         if children_raw and not isinstance(children_raw, list):
             raise ValueError("Поле children должно быть списком маршрутов")
+        raw_local = dict(raw)
+        raw_local.pop("children", None)
+        if effective_env:
+            raw_local = apply_env(raw_local, effective_env)
+        file_config = raw_local.get("file") or raw_local.get("file_upload")
+        file_upload = FileUploadConfig(**file_config) if file_config else None
+        auth_config = raw_local.get("basic_auth") or raw_local.get("auth")
+        basic_auth = BasicAuthConfig(**auth_config) if auth_config else None
+        interval = max(float(raw_local.get("interval", 60)), 1.0)
+        timeout = max(float(raw_local.get("timeout", 10)), 1.0)
+        body_limit = int(raw_local.get("max_response_chars", raw_local.get("body_max_chars", 2048)))
+        json_payload = cls._resolve_json_payload(raw_local.get("json"), base_dir, effective_env)
+
+        # multipart_json_fields допускает краткую запись в виде словаря.
+        multipart_json_fields = cls._parse_multipart_json_fields(
+            raw_local.get("multipart_json_fields") or raw_local.get("multipart_json"),
+            base_dir,
+            effective_env,
+        )
+        # wait_for можно задавать строкой или объектом.
+        wait_for = cls._parse_wait_for(raw_local.get("wait_for"))
+        delay_before = cls._parse_delay(raw_local.get("delay_before") or raw_local.get("pre_delay"))
+        children_delay = cls._parse_delay(raw_local.get("children_delay") or raw_local.get("children_timeout")) or 0.0
         children = [
-            cls.from_dict(entry, source_path=source_path, base_dir=base_dir) for entry in children_raw
+            cls.from_dict(entry, source_path=source_path, base_dir=base_dir, env_map=effective_env)
+            for entry in children_raw
         ]
 
         return cls(
-            name=raw["name"],
-            url=raw["url"],
-            method=str(raw.get("method", "GET")).upper(),
+            name=raw_local["name"],
+            url=raw_local["url"],
+            method=str(raw_local.get("method", "GET")).upper(),
             interval=interval,
             timeout=timeout,
-            headers=dict(raw.get("headers", {})),
-            params=dict(raw.get("params", {})),
-            data=raw.get("data") or raw.get("body"),
+            headers=dict(raw_local.get("headers", {})),
+            params=dict(raw_local.get("params", {})),
+            data=raw_local.get("data") or raw_local.get("body"),
             json_body=json_payload,
-            allow_redirects=raw.get("allow_redirects", True),
-            verify_ssl=raw.get("verify_ssl", True),
-            ca_bundle=raw.get("ca_bundle") or raw.get("ca_cert") or raw.get("verify_path"),
-            description=raw.get("description"),
-            enabled=raw.get("enabled", True),
+            allow_redirects=raw_local.get("allow_redirects", True),
+            verify_ssl=raw_local.get("verify_ssl", True),
+            ca_bundle=raw_local.get("ca_bundle") or raw_local.get("ca_cert") or raw_local.get("verify_path"),
+            description=raw_local.get("description"),
+            enabled=raw_local.get("enabled", True),
             body_max_chars=body_limit,
             file_upload=file_upload,
             basic_auth=basic_auth,
-            multipart_json_field=raw.get("multipart_json_field") or raw.get("json_field"),
+            multipart_json_field=raw_local.get("multipart_json_field") or raw_local.get("json_field"),
             multipart_json_fields=multipart_json_fields,
-            json_query_param=raw.get("json_query_param") or raw.get("json_param"),
-            encoding_file=raw.get("encoding_file") or raw.get("encondig_file") or "utf-8",
-            encoding_json=raw.get("encoding_json") or raw.get("encondig_json") or "utf-8",
+            json_query_param=raw_local.get("json_query_param") or raw_local.get("json_param"),
+            encoding_file=raw_local.get("encoding_file") or raw_local.get("encondig_file") or "utf-8",
+            encoding_json=raw_local.get("encoding_json") or raw_local.get("encondig_json") or "utf-8",
             delay_before=delay_before,
             children_delay=children_delay,
             wait_for=wait_for,
-            tags=list(raw.get("tags", [])),
-            monitor_type=raw.get("type", "http").lower(),
+            tags=list(raw_local.get("tags", [])),
+            monitor_type=raw_local.get("type", "http").lower(),
             source_path=source_path,
             children=children,
         )
 
     @staticmethod
-    def _resolve_json_payload(payload: Any, base_dir: Optional[Path]) -> Any:
+    def _resolve_json_payload(
+        payload: Any, base_dir: Optional[Path], env_map: Optional[Mapping[str, Any]]
+    ) -> Any:
+        if env_map:
+            payload = apply_env(payload, env_map)
         if not isinstance(payload, str):
             return payload
 
@@ -164,7 +183,8 @@ class HttpRouteConfig:
             if file_path.exists():
                 try:
                     content = file_path.read_text(encoding="utf-8")
-                    return json.loads(content or "null")
+                    parsed = json.loads(content or "null")
+                    return apply_env(parsed, env_map) if env_map else parsed
                 except json.JSONDecodeError as exc:
                     raise ValueError(f"Invalid JSON content in {file_path}: {exc}") from exc
 
@@ -172,7 +192,7 @@ class HttpRouteConfig:
 
     @classmethod
     def _parse_multipart_json_fields(
-        cls, raw_value: Any, base_dir: Optional[Path]
+        cls, raw_value: Any, base_dir: Optional[Path], env_map: Optional[Mapping[str, Any]]
     ) -> List[MultipartJsonField]:
         if not raw_value:
             return []
@@ -180,7 +200,7 @@ class HttpRouteConfig:
             # Короткая форма: поле -> JSON/путь.
             fields: List[MultipartJsonField] = []
             for field_name, payload in raw_value.items():
-                resolved_payload = cls._resolve_json_payload(payload, base_dir)
+                resolved_payload = cls._resolve_json_payload(payload, base_dir, env_map)
                 fields.append(MultipartJsonField(field_name=str(field_name), payload=resolved_payload))
             return fields
         if not isinstance(raw_value, list):
@@ -196,7 +216,7 @@ class HttpRouteConfig:
             payload_raw = entry.get("json")
             if payload_raw is None and "payload" in entry:
                 payload_raw = entry.get("payload")
-            resolved_payload = cls._resolve_json_payload(payload_raw, base_dir)
+            resolved_payload = cls._resolve_json_payload(payload_raw, base_dir, env_map)
             encoding = entry.get("encoding")
             fields.append(
                 MultipartJsonField(field_name=str(field_name), payload=resolved_payload, encoding=encoding)
